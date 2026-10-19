@@ -6,7 +6,7 @@ This fork adds a real `firebird` provider, a JavaScript driver adapter, generate
 
 The ORM source line is Prisma 7.10.1. Its paired engines baseline is `d1b3f377ca835d73fd50954a5e22128b9ebdd6b8`, with the Firebird changes applied in the companion checkout. The matching upstream Wasm package version is `8.1.0-1.d1b3f377ca835d73fd50954a5e22128b9ebdd6b8`; that package label does not make this a Prisma 8 implementation. Use the paired sources together rather than replacing either checkout with upstream `main`.
 
-The companion engines changes do not yet have a remotely available fork. A checkout of this ORM repository alone therefore cannot reproduce the build. Obtain the matching modified engines sources and the required upstream compiler package from the maintainer first. The expected local layout is:
+Use [paired engines commit 8d1a49e7db09f86e072d382fd8f5179a167fc0b0](https://github.com/cosmemilton/prisma-engines/commit/8d1a49e7db09f86e072d382fd8f5179a167fc0b0) (`work/firebird3`) in a sibling `prisma-engines-firebird` checkout. Build the local Wasm packages and provide the matching upstream compiler package as described below. The expected local layout is:
 
 ```text
 workspace/
