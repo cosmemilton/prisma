@@ -1,3 +1,5 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import Debug from '@prisma/debug'
 import type { ErrorCapturingSqlMigrationAwareDriverAdapterFactory, ErrorRegistry } from '@prisma/driver-adapter-utils'
 import {
@@ -21,7 +23,7 @@ import { handleViewsIO } from './views/handleViewsIO'
 const debugStderr = Debug('prisma:schemaEngine:wasm:stderr')
 const debugStdout = Debug('prisma:schemaEngine:wasm:stdout')
 
-type SchemaEngineMethods = Omit<wasm.SchemaEngineWasm, 'free'>
+type SchemaEngineMethods = Omit<wasm.SchemaEngineWasm, 'free' | 'dispose'>
 export type SchemaEngineInput<M extends keyof SchemaEngineMethods> = Parameters<wasm.SchemaEngineWasm[M]>[0]
 export type SchemaEngineOutput<M extends keyof SchemaEngineMethods> = ReturnType<wasm.SchemaEngineWasm[M]>
 
@@ -46,6 +48,7 @@ export interface SchemaEngineWasmOptions extends Omit<SchemaEngineWasmSetupInput
 export class SchemaEngineWasm implements SchemaEngine {
   private engine: wasm.SchemaEngineWasm
   private errorRegistry: ErrorRegistry
+  #stopPromise?: Promise<void>
 
   // TODO: forward enabled preview features to the Wasm engine
   private enabledPreviewFeatures?: string[]
@@ -301,9 +304,17 @@ export class SchemaEngineWasm implements SchemaEngine {
    * Stop the engine.
    */
   public stop(): Promise<void> {
+    return (this.#stopPromise ??= this.#dispose())
+  }
+
+  async #dispose(): Promise<void> {
     this.isRunning = false
-    this.engine.free()
-    return Promise.resolve()
+    const engine = this.engine as wasm.SchemaEngineWasm & { dispose?: () => Promise<void> }
+    try {
+      await engine.dispose?.()
+    } finally {
+      engine.free()
+    }
   }
 }
 

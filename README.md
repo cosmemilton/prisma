@@ -27,6 +27,8 @@
   <hr />
 </div>
 
+> **Experimental Firebird 3 fork:** see the [Firebird development guide](docs/firebird.md) for the paired engines build, supported subset and limitations. The Firebird changes are source work and have no published package release.
+
 > **This is the Prisma ORM 7.x line, maintained on the `v7` branch.** The default branch of this repository now hosts [Prisma Next](https://github.com/prisma/prisma/tree/main), a TypeScript rewrite of Prisma ORM. The `prisma` and `@prisma/*` packages on npm are published from here.
 
 ## What is Prisma?

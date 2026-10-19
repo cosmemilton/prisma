@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type * as esbuild from 'esbuild'
 import fs from 'fs'
 import lineReplace from 'line-replace'
@@ -6,6 +7,12 @@ import path from 'path'
 import type { BuildOptions } from '../../../helpers/compile/build'
 import { build } from '../../../helpers/compile/build'
 import { copyFilePlugin } from '../../../helpers/compile/plugins/copyFilePlugin'
+
+const profile = process.env.PRISMA_CLI_BUILD_PROFILE ?? 'default'
+if (profile !== 'default' && profile !== 'firebird') {
+  throw new Error('PRISMA_CLI_BUILD_PROFILE must be default or firebird.')
+}
+const profileDefine = { 'process.env.PRISMA_CLI_BUILD_PROFILE': JSON.stringify(profile) }
 
 /**
  * Manages the extra actions that are needed for the CLI to work
@@ -51,10 +58,19 @@ const cliLifecyclePlugin: esbuild.Plugin = {
 async function copyClientWasmRuntime() {
   const clientPath = path.join(__dirname, '..', '..', 'client')
   const clientRuntimePath = path.join(clientPath, 'runtime')
+  const allProviders = ['cockroachdb', 'mysql', 'postgresql', 'sqlite', 'sqlserver', 'firebird']
+  const providers = profile === 'firebird' ? ['firebird'] : allProviders
 
-  for (const provider of ['cockroachdb', 'mysql', 'postgresql', 'sqlite', 'sqlserver']) {
+  for (const provider of allProviders) {
     for (const build of ['fast', 'small']) {
       const baseName = `query_compiler_${build}_bg.${provider}`
+      if (!providers.includes(provider)) {
+        // Remove only known assets from a previous default-profile build.
+        await Promise.all(
+          ['js', 'mjs', 'wasm'].map((extension) => fs.promises.rm(`./build/${baseName}.${extension}`, { force: true })),
+        )
+        continue
+      }
 
       for (const file of [`${baseName}.js`, `${baseName}.mjs`]) {
         await fs.promises.copyFile(path.join(clientRuntimePath, file), `./build/${file}`)
@@ -94,10 +110,11 @@ async function buildStudioFrontend() {
 const cliTypesBuildConfig: BuildOptions = {
   name: 'cliTypes',
   entryPoints: ['src/types.ts'],
-  outdir: 'dist',
+  outfile: 'build/types',
   bundle: false,
   emitTypes: true,
   minify: false,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 /**
@@ -119,6 +136,7 @@ const cliConfigBuildConfig: BuildOptions = {
   bundle: false,
   emitTypes: true,
   minify: false,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 const cliDispatcherBuildConfig: BuildOptions = {
@@ -130,6 +148,8 @@ const cliDispatcherBuildConfig: BuildOptions = {
   external: ['./cli.js', './completion.js'],
   emitTypes: false,
   minify: true,
+  define: profileDefine,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 const cliBuildConfig: BuildOptions = {
@@ -140,6 +160,8 @@ const cliBuildConfig: BuildOptions = {
   external: ['better-sqlite3', 'esbuild'],
   emitTypes: false,
   minify: true,
+  define: profileDefine,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 const cliCompletionBuildConfig: BuildOptions = {
@@ -149,6 +171,8 @@ const cliCompletionBuildConfig: BuildOptions = {
   bundle: true,
   emitTypes: false,
   minify: true,
+  define: profileDefine,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 // Setup preinstall
@@ -159,12 +183,30 @@ const preinstallBuildConfig: BuildOptions = {
   bundle: true,
   emitTypes: false,
   minify: true,
+  emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
 }
 
 const optionalPlugins = process.env.DEV === 'true' ? [] : [cliTypesBuildConfig, cliConfigBuildConfig]
 
-build([...optionalPlugins, cliDispatcherBuildConfig, cliBuildConfig, cliCompletionBuildConfig, preinstallBuildConfig])
-  .then(buildStudioFrontend)
+build([
+  ...optionalPlugins,
+  cliDispatcherBuildConfig,
+  cliBuildConfig,
+  ...(profile === 'default' ? [cliCompletionBuildConfig] : []),
+  preinstallBuildConfig,
+])
+  .then(async () => {
+    if (profile === 'default') {
+      await buildStudioFrontend()
+    } else {
+      // A profile rebuild must not retain a previous default build's UI assets.
+      await Promise.all(
+        ['build/studio.js', 'build/studio.css', 'build/completion.js', 'build/cli-completion.meta.json'].map((file) =>
+          fs.promises.rm(file, { force: true }),
+        ),
+      )
+    }
+  })
   .catch((e) => {
     console.error(e)
     process.exit(1)

@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import {
@@ -109,56 +110,60 @@ export class MigrateDeploy implements Command {
     })
 
     try {
-      // Automatically create the database if it doesn't exist
-      const successMessage = await ensureDatabaseExists(
-        baseDir,
-        getSchemaDatasourceProvider(schemaContext),
-        validatedConfig,
-      )
-      if (successMessage) {
-        process.stdout.write('\n' + successMessage + '\n')
+      try {
+        // Automatically create the database if it doesn't exist
+        const successMessage = await ensureDatabaseExists(
+          baseDir,
+          getSchemaDatasourceProvider(schemaContext),
+          validatedConfig,
+        )
+        if (successMessage) {
+          process.stdout.write('\n' + successMessage + '\n')
+        }
+      } catch (e) {
+        process.stdout.write('\n') // empty line
+        throw e
       }
-    } catch (e) {
+
+      const listMigrationDirectoriesResult = await migrate.listMigrationDirectories()
+      debug({ listMigrationDirectoriesResult })
+
       process.stdout.write('\n') // empty line
-      throw e
-    }
+      if (listMigrationDirectoriesResult.migrations.length > 0) {
+        const migrations = listMigrationDirectoriesResult.migrations
+        process.stdout.write(
+          `${migrations.length} migration${migrations.length > 1 ? 's' : ''} found in prisma/migrations\n`,
+        )
+      } else {
+        process.stdout.write(`No migration found in prisma/migrations\n`)
+      }
 
-    const listMigrationDirectoriesResult = await migrate.listMigrationDirectories()
-    debug({ listMigrationDirectoriesResult })
+      let migrationIds: string[]
+      try {
+        process.stdout.write('\n') // empty line
+        const { appliedMigrationNames } = await migrate.applyMigrations()
+        migrationIds = appliedMigrationNames
+      } finally {
+        // Stop engine
+        await migrate.stop()
+      }
 
-    process.stdout.write('\n') // empty line
-    if (listMigrationDirectoriesResult.migrations.length > 0) {
-      const migrations = listMigrationDirectoriesResult.migrations
-      process.stdout.write(
-        `${migrations.length} migration${migrations.length > 1 ? 's' : ''} found in prisma/migrations\n`,
-      )
-    } else {
-      process.stdout.write(`No migration found in prisma/migrations\n`)
-    }
-
-    let migrationIds: string[]
-    try {
       process.stdout.write('\n') // empty line
-      const { appliedMigrationNames } = await migrate.applyMigrations()
-      migrationIds = appliedMigrationNames
-    } finally {
-      // Stop engine
-      await migrate.stop()
-    }
-
-    process.stdout.write('\n') // empty line
-    if (migrationIds.length === 0) {
-      return green(`No pending migrations to apply.`)
-    } else {
-      return `The following migration(s) have been applied:\n\n${printFilesFromMigrationIds(
-        'migrations',
-        migrationIds,
-        {
-          'migration.sql': '',
-        },
-      )}
+      if (migrationIds.length === 0) {
+        return green(`No pending migrations to apply.`)
+      } else {
+        return `The following migration(s) have been applied:\n\n${printFilesFromMigrationIds(
+          'migrations',
+          migrationIds,
+          {
+            'migration.sql': '',
+          },
+        )}
 
 ${green('All migrations have been successfully applied.')}`
+      }
+    } finally {
+      await migrate.stop()
     }
   }
 

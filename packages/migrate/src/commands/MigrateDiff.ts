@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import {
@@ -11,8 +12,11 @@ import {
   link,
   loadSchemaContext,
   MigrateTypes,
+  processSchemaResult,
+  SchemaContext,
   toSchemasContainer,
   toSchemasWithConfigDir,
+  wasmSchemaEngineLoader,
 } from '@prisma/internals'
 import fs from 'fs-jetpack'
 import { bold, dim, green, italic } from 'kleur/colors'
@@ -196,6 +200,7 @@ export class MigrateDiff implements Command {
       return this.help(`${errorMessages.join('\n')}`)
     }
 
+    const targetContexts: SchemaContext[] = []
     let from: EngineArgs.MigrateDiffTarget
     if (args['--from-empty']) {
       from = {
@@ -214,6 +219,7 @@ export class MigrateDiff implements Command {
         tag: 'schemaDatamodel',
         ...toSchemasContainer(schema.schemas),
       }
+      targetContexts.push(await processSchemaResult({ schemaResult: schema, printLoadMessage: false }))
     } else if (args['--from-migrations']) {
       from = {
         tag: 'migrations',
@@ -228,6 +234,7 @@ export class MigrateDiff implements Command {
         tag: 'schemaDatasource',
         ...toSchemasWithConfigDir(schemaContext, baseDir),
       }
+      targetContexts.push(schemaContext)
     }
 
     let to: EngineArgs.MigrateDiffTarget
@@ -248,6 +255,7 @@ export class MigrateDiff implements Command {
         tag: 'schemaDatamodel',
         ...toSchemasContainer(schema.schemas),
       }
+      targetContexts.push(await processSchemaResult({ schemaResult: schema, printLoadMessage: false }))
     } else if (args['--to-migrations']) {
       to = {
         tag: 'migrations',
@@ -262,18 +270,17 @@ export class MigrateDiff implements Command {
         tag: 'schemaDatasource',
         ...toSchemasWithConfigDir(schemaContext, baseDir),
       }
+      targetContexts.push(schemaContext)
     }
 
     const schemaFilter: MigrateTypes.SchemaFilter = {
       externalTables: config.tables?.external ?? [],
       externalEnums: config.enums?.external ?? [],
     }
-    const migrate = await Migrate.setup({
-      schemaEngineConfig: config,
-      baseDir,
-      schemaFilter,
-      extensions: config['extensions'],
-    })
+    const firebirdContext = targetContexts.find((context) => context.primaryDatasource?.provider === 'firebird')
+    const offlineFirebird =
+      (firebirdContext !== undefined || process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') &&
+      [from!, to!].every((target) => target.tag === 'empty' || target.tag === 'schemaDatamodel')
 
     // Capture stdout if --output is defined
     const captureStdout = new CaptureStdout()
@@ -284,8 +291,9 @@ export class MigrateDiff implements Command {
     }
 
     let result: EngineResults.MigrateDiffOutput
+    let migrate: Migrate | undefined
     try {
-      result = await migrate.engine.migrateDiff({
+      const input: EngineArgs.MigrateDiffInput = {
         from: from!,
         to: to!,
         script: args['--script'] || false, // default is false
@@ -294,15 +302,32 @@ export class MigrateDiff implements Command {
           externalTables: config.tables?.external ?? [],
           externalEnums: config.enums?.external ?? [],
         },
-      })
+      }
+      if (offlineFirebird) {
+        // This module-level API never constructs a connector or reads a datasource URL.
+        const { stdout, ...output } = await wasmSchemaEngineLoader.diffDatamodels(input)
+        if (stdout) process.stdout.write(stdout)
+        result = output
+      } else {
+        migrate = await Migrate.setup({
+          schemaEngineConfig: config,
+          baseDir,
+          schemaFilter,
+          schemaContext: firebirdContext,
+          extensions: config['extensions'],
+        })
+        result = await migrate.engine.migrateDiff(input)
+      }
     } finally {
-      // Stop engine
-      await migrate.stop()
+      try {
+        await migrate?.stop()
+      } finally {
+        if (isOutputDefined) captureStdout.stopCapture()
+      }
     }
 
     // Write output to file if --output is defined
     if (isOutputDefined) {
-      captureStdout.stopCapture()
       const diffOutput = captureStdout.getCapturedText()
       captureStdout.clearCaptureText()
       await fs.writeAsync(outputPath!, diffOutput.join('\n'))

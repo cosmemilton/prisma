@@ -31,6 +31,7 @@
       "@prisma/instrumentation-contract": ["./packages/instrumentation-contract/src"],
       "@prisma/driver-adapter-utils": ["./packages/driver-adapter-utils/src"],
       "@prisma/adapter-d1": ["./packages/adapter-d1/src/index-node.ts"],
+      "@prisma/adapter-firebird": ["./packages/adapter-firebird/src"],
       "@prisma/adapter-libsql": ["./packages/adapter-libsql/src"],
       "@prisma/adapter-neon": ["./packages/adapter-neon/src"],
       "@prisma/adapter-pg": ["./packages/adapter-pg/src"],

@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type * as DMMF from '@prisma/dmmf'
 import type {
   ActiveConnectorType,
@@ -430,7 +431,8 @@ function isWasmEngineSupported(provider: ConnectorType) {
     provider === 'cockroachdb' ||
     provider === 'mysql' ||
     provider === 'sqlite' ||
-    provider === 'sqlserver'
+    provider === 'sqlserver' ||
+    provider === 'firebird'
   )
 }
 

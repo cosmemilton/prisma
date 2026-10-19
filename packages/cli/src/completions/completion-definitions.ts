@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { CommandCompletion, CompletionOption } from '@prisma/internals'
 import {
   completionDevDbPorts,
@@ -102,7 +103,7 @@ const completeCompletion: CommandCompletion = {
   })),
 }
 
-export const ALL_COMPLETIONS: CommandCompletion[] = [
+const completions: CommandCompletion[] = [
   initCompletion,
   bootstrapCompletion,
   devCompletion,
@@ -134,3 +135,28 @@ export const ALL_COMPLETIONS: CommandCompletion[] = [
   migrateResolveCompletion,
   migrateDiffCompletion,
 ]
+
+export const ALL_COMPLETIONS: CommandCompletion[] =
+  process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+    ? [
+        initCompletion,
+        generateCompletion,
+        validateCompletion,
+        formatCompletion,
+        versionCompletion,
+        debugInfoCompletion,
+        completeCompletion,
+        dbCompletion,
+        dbExecuteCompletion,
+        dbPullCompletion,
+        dbPushCompletion,
+        dbSeedCompletion,
+        migrateCompletion,
+        migrateDevCompletion,
+        migrateResetCompletion,
+        migrateDeployCompletion,
+        migrateStatusCompletion,
+        migrateResolveCompletion,
+        migrateDiffCompletion,
+      ]
+    : completions

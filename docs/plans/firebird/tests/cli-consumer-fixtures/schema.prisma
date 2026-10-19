@@ -1,0 +1,30 @@
+// Added for experimental Firebird support (2026-10-18); see MODIFICATIONS.md.
+generator client {
+  provider            = "prisma-client"
+  output              = "./generated"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "firebird"
+}
+
+model CliUser {
+  id      Int       @id @default(autoincrement())
+  email   String    @unique @db.VarChar(120)
+  name    String?   @db.VarChar(40)
+  balance Decimal?  @db.Decimal(18, 4)
+  big     BigInt?
+  payload Bytes?
+  active  Boolean   @default(true)
+  posts   CliPost[]
+
+}
+
+model CliPost {
+  id       Int     @id @default(autoincrement())
+  title    String  @db.VarChar(120)
+  authorId Int
+  author   CliUser @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,52 @@
+// Added for experimental Firebird support (2026-10-18); see MODIFICATIONS.md.
+generator client {
+  provider            = "prisma-client"
+  output              = "./generated"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "firebird"
+}
+
+model AliquotaIbpt {
+  codigo    String   @id @map("COD_NCM") @db.VarChar(10)
+  nacional  Decimal? @map("ALIQNAC") @db.Decimal(15, 2)
+  importada Decimal? @map("ALIQIMP") @db.Decimal(15, 2)
+  estadual  Decimal? @map("ALIQEST") @db.Decimal(15, 2)
+  municipal Decimal? @map("ALIQMUN") @db.Decimal(15, 2)
+  @@map("IBPT")
+}
+
+model AliquotaIbptCiAi {
+  codigo    String   @id @map("COD_NCM") @db.VarChar(10)
+  nacional  Decimal? @map("ALIQNAC") @db.Decimal(15, 2)
+  importada Decimal? @map("ALIQIMP") @db.Decimal(15, 2)
+  estadual  Decimal? @map("ALIQEST") @db.Decimal(15, 2)
+  municipal Decimal? @map("ALIQMUN") @db.Decimal(15, 2)
+  @@map("IBPT_CI_AI")
+}
+
+model CidadeLegado {
+  codigo    Int     @id @map("COD_MUN")
+  municipio String? @map("NOME_MUNICIPIO") @db.VarChar(35)
+  estado    String? @map("ESTADO") @db.VarChar(25)
+  sigla     String? @map("SIGLA") @db.VarChar(2)
+  @@map("IBGE")
+}
+
+model CidadeLegadoAnterior {
+  codigo    Int     @id @map("COD_MUN")
+  municipio String? @map("NOME_MUNICIPIO") @db.VarChar(30)
+  estado    String? @map("ESTADO") @db.VarChar(20)
+  sigla     String? @map("SIGLA") @db.VarChar(2)
+  @@map("IBGE_OLD")
+}
+
+// The long text is deliberately unindexed. The physical primary key is an Int.
+model PrefixBoundary {
+  id   Int    @id @map("ID")
+  text String @map("PREFIX_TEXT") @db.VarChar(8191)
+  @@map("M7_PREFIX_BOUNDARY")
+}

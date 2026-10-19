@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import {
   ColumnTypeEnum,
   SqlDriverAdapter,
@@ -173,6 +174,31 @@ function statementNode(type: 'query' | 'execute', args: number[]): QueryPlanNode
     },
   }
 }
+
+test('chunks Firebird queries at the connector budget when connection metadata is absent', async () => {
+  const queryRaw = vi.fn((_query: SqlQuery) => Promise.resolve(resultSetWithRows(1)))
+  const queryable: SqlQueryable = {
+    provider: 'firebird',
+    adapterName: '@prisma/adapter-firebird',
+    queryRaw,
+    executeRaw: () => Promise.resolve(0),
+  }
+  const interpreter = QueryInterpreter.forSql({ tracingHelper: noopTracingHelper, provider: 'firebird' })
+
+  await interpreter.run(
+    statementNode(
+      'query',
+      Array.from({ length: 1001 }, (_, i) => i),
+    ),
+    {
+      queryable,
+      transactionManager: { enabled: false },
+      scope: {},
+    },
+  )
+
+  expect(queryRaw.mock.calls.map(([query]) => query.args.length)).toEqual([1000, 1])
+})
 
 // A statement that gets split into multiple chunks is no longer atomic on its own, so the
 // interpreter must wrap the chunks in a transaction to avoid committing a partial write when

@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 
 import path from 'node:path'
 
@@ -28,29 +29,11 @@ import {
 } from '@prisma/migrate'
 import { bold, dim, red, yellow } from 'kleur/colors'
 
-import { Bootstrap } from './bootstrap/Bootstrap'
 import { CLI } from './CLI'
-import { Completions } from './completions'
 import { DebugInfo } from './DebugInfo'
 import { Format } from './Format'
 import { Generate } from './Generate'
 import { Init } from './Init'
-import { Mcp } from './mcp/MCP'
-import { Platform } from './platform/_Platform'
-import { Link as PostgresLink } from './postgres/link/Link'
-import { PostgresCommand } from './postgres/PostgresCommand'
-import { Status } from './Status'
-import { Studio } from './Studio'
-/*
-  When running bin.ts with ts-node with DEBUG="*"
-  This error shows and blocks the execution
-  Quick hack is to comment the Studio import and usage to use the CLI without building it...
-  prisma:cli Error: Cannot find module '@prisma/internals'
-  prisma:cli Require stack:
-  prisma:cli - /Users/j42/Dev/prisma-meow/node_modules/.pnpm/@prisma+studio-pcw@0.456.0/node_modules/@prisma/studio-pcw/dist/index.js
-*/
-// import { Studio } from './Studio'
-import { SubCommand } from './SubCommand'
 import { Telemetry } from './Telemetry'
 import { redactCommandArray } from './utils/checkpoint'
 import { getCliDistributionIdentity } from './utils/cli-distribution-identity'
@@ -98,12 +81,15 @@ async function main(): Promise<number> {
   // create a new CLI with our subcommands
 
   const identity = getCliDistributionIdentity()
+  const defaultCommands =
+    process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+      ? {}
+      : (await import('./default-commands')).createDefaultCommands(identity)
 
   const cli = CLI.new(
     {
-      bootstrap: Bootstrap.new(identity),
+      ...defaultCommands,
       init: Init.new(identity),
-      mcp: Mcp.new(identity),
       migrate: MigrateCommand.new(
         {
           dev: MigrateDev.new(identity),
@@ -125,24 +111,16 @@ async function main(): Promise<number> {
         },
         identity,
       ),
-      postgres: PostgresCommand.new(
-        {
-          link: PostgresLink.new(identity),
-        },
-        identity,
-      ),
       generate: Generate.new(identity),
       version: Version.new(identity),
       validate: Validate.new(identity),
       format: Format.new(identity),
       telemetry: Telemetry.new(),
       debug: DebugInfo.new(identity),
-      complete: Completions.new(identity),
-      dev: new SubCommand('@prisma/cli-dev', identity),
-      studio: Studio.new(identity),
-      platform: Platform.$.new({ status: Status.new(identity) }, identity),
     },
-    ['version', 'init', 'migrate', 'db', 'generate', 'validate', 'format', 'telemetry'],
+    process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+      ? []
+      : ['version', 'init', 'migrate', 'db', 'generate', 'validate', 'format', 'telemetry'],
     download,
     identity,
   )

@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import readline from 'node:readline'
 
 import type { Datasource } from '@prisma/config'
@@ -54,6 +55,7 @@ export type SchemaEngineCLIOptions = SchemaEngineCLISetupInput
 export class SchemaEngineCLI implements SchemaEngine {
   private debug: boolean
   private child?: ChildProcess
+  private stopping?: { child: ChildProcess; promise: Promise<void> }
   private schemaContext?: SchemaContext
   private datasource?: Datasource
   private listeners: { [key: string]: (result: any, err?: any) => any } = {}
@@ -277,9 +279,12 @@ export class SchemaEngineCLI implements SchemaEngine {
   }
 
   public async stop(): Promise<void> {
-    if (!this.child) {
+    const child = this.child
+    if (!child || typeof child.exitCode === 'number' || typeof child.signalCode === 'string') {
+      this.isRunning = false
       return
     }
+    if (this.stopping?.child === child) return this.stopping.promise
 
     const result = new Promise<void>((resolve) => {
       // Terminate the child process after a timeout if it's still running. On
@@ -292,20 +297,28 @@ export class SchemaEngineCLI implements SchemaEngine {
       // to gracefully shut down in response to EOF in stdin.
       const timer = setTimeout(
         () => {
-          this.child?.kill()
+          child.removeListener('exit', onExit)
+          child.kill()
           resolve()
         },
         process.platform === 'win32' ? 4000 : 0,
       ).unref()
 
-      this.child!.on('exit', () => {
+      const onExit = () => {
         clearTimeout(timer)
         resolve()
-      })
+      }
+      child.once('exit', onExit)
+    })
+    this.stopping = { child, promise: result }
+    void result.then(() => {
+      if (this.stopping?.child === child && this.stopping.promise === result) {
+        this.stopping = undefined
+      }
     })
 
     // Close stdin to tell the schema engine to stop the RPC server and exit.
-    this.child.stdin?.end()
+    child.stdin?.end()
 
     this.isRunning = false
 
@@ -402,6 +415,7 @@ export class SchemaEngineCLI implements SchemaEngine {
           args.push(...['--extension-types', JSON.stringify(this.extensionConfig)])
         }
 
+        this.stopping = undefined
         this.child = spawn(binaryPath, args, {
           cwd: this.baseDir,
           stdio: ['pipe', 'pipe', this.debug ? process.stderr : 'pipe'],

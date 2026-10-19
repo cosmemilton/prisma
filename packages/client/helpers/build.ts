@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import fs from 'fs'
 import path from 'path'
 
@@ -12,7 +13,14 @@ const fillPluginDir = path.join('..', '..', 'helpers', 'compile', 'plugins', 'fi
 const functionPolyfillPath = path.join(fillPluginDir, 'fillers', 'function.ts')
 const runtimeDir = path.resolve(__dirname, '..', 'runtime')
 
-const DRIVER_ADAPTER_SUPPORTED_PROVIDERS = ['postgresql', 'sqlite', 'mysql', 'sqlserver', 'cockroachdb'] as const
+const DRIVER_ADAPTER_SUPPORTED_PROVIDERS = [
+  'postgresql',
+  'sqlite',
+  'mysql',
+  'sqlserver',
+  'cockroachdb',
+  'firebird',
+] as const
 type DriverAdapterSupportedProvider = (typeof DRIVER_ADAPTER_SUPPORTED_PROVIDERS)[number]
 
 const MODULE_FORMATS = ['esm', 'cjs'] as const
@@ -43,7 +51,7 @@ const require = __banner_node_module.createRequire(import.meta.url);`
 function nodeRuntimeBuildConfig(targetBuildType: typeof TARGET_BUILD_TYPE, format: ModuleFormat): BuildOptions {
   return {
     format,
-    name: targetBuildType,
+    name: process.env.PRISMA_BUILD_METAFILE === 'true' ? `${targetBuildType}-${format}` : targetBuildType,
     entryPoints: ['src/runtime/index.ts'],
     outfile: `runtime/${targetBuildType}`,
     outExtension: getOutExtension(format),
@@ -51,6 +59,7 @@ function nodeRuntimeBuildConfig(targetBuildType: typeof TARGET_BUILD_TYPE, forma
     minify: shouldMinify,
     sourcemap: 'linked',
     emitTypes: ['library', 'client'].includes(targetBuildType),
+    emitMetafile: process.env.PRISMA_BUILD_METAFILE === 'true',
     external: ['@prisma/client-runtime-utils'],
     define: {
       NODE_CLIENT: 'true',

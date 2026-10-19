@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { CommandCompletion } from '@prisma/internals'
 import {
   completionClientOutputPaths,
@@ -16,7 +17,10 @@ export const initCompletion: CommandCompletion = {
     {
       name: 'datasource-provider',
       description: 'Define the datasource provider',
-      values: completionDatasourceProviders,
+      values:
+        process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+          ? [{ value: 'firebird' }]
+          : [...completionDatasourceProviders, { value: 'firebird' }],
     },
     {
       name: 'generator-provider',
@@ -30,6 +34,10 @@ export const initCompletion: CommandCompletion = {
     },
     { name: 'output', description: 'Define Prisma Client generator output path', values: completionClientOutputPaths },
     { name: 'with-model', description: 'Add an example model to the created schema file' },
-    { name: 'db', description: 'Provision a fully managed Prisma Postgres database on the Prisma Data Platform' },
+    ...(process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+      ? []
+      : [
+          { name: 'db', description: 'Provision a fully managed Prisma Postgres database on the Prisma Data Platform' },
+        ]),
   ],
 }

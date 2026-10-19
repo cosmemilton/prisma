@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { Debug } from '@prisma/debug'
 import { ConnectionInfo, SqlQuery, SqlQueryable, SqlResultSet } from '@prisma/driver-adapter-utils'
 import type { SqlCommenterPlugin, SqlCommenterQueryInfo } from '@prisma/sqlcommenter'
@@ -577,6 +578,9 @@ export class QueryInterpreter {
         return 999
       case 'sqlserver':
         return 2098
+      case 'firebird':
+        // Match the conservative batching budget used by the Firebird compiler and adapter.
+        return 1000
       case 'mongodb':
         return undefined
       default:

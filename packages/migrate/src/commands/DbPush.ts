@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { PrismaConfigInternal } from '@prisma/config'
 import {
   arg,
@@ -133,147 +134,151 @@ export class DbPush implements Command {
     })
 
     try {
-      // Automatically create the database if it doesn't exist
-      const successMessage = await ensureDatabaseExists(baseDir, datasourceProvider, validatedConfig)
-      if (successMessage) {
-        process.stdout.write('\n' + successMessage + '\n')
-      }
-    } catch (e) {
-      process.stdout.write('\n') // empty line
-      throw e
-    }
-
-    let wasDatabaseReset = false
-    if (args['--force-reset']) {
-      process.stdout.write('\n')
-
-      aiAgentConfirmationCheckpoint()
-
       try {
-        await migrate.reset()
+        // Automatically create the database if it doesn't exist
+        const successMessage = await ensureDatabaseExists(baseDir, datasourceProvider, validatedConfig)
+        if (successMessage) {
+          process.stdout.write('\n' + successMessage + '\n')
+        }
+      } catch (e) {
+        process.stdout.write('\n') // empty line
+        throw e
+      }
+
+      let wasDatabaseReset = false
+      if (args['--force-reset']) {
+        process.stdout.write('\n')
+
+        aiAgentConfirmationCheckpoint()
+
+        try {
+          await migrate.reset()
+        } catch (e) {
+          await migrate.stop()
+          throw e
+        }
+
+        let successfulResetMsg = `The ${datasourceInfo.prettyProvider} database`
+        if (datasourceInfo.dbName) {
+          successfulResetMsg += ` "${datasourceInfo.dbName}"`
+        }
+
+        const schemasLength = datasourceInfo.schemas?.length || 0
+        // If schemas are defined in the datasource block, print them
+        if (datasourceInfo.schemas && schemasLength > 0) {
+          successfulResetMsg += ` schema${schemasLength > 1 ? 's' : ''} "${datasourceInfo.schemas.join(', ')}"`
+        }
+        // Otherwise, print the schema if it's defined in the connection string
+        else if (datasourceInfo.schema) {
+          successfulResetMsg += ` schema "${datasourceInfo.schema}"`
+        }
+
+        if (datasourceInfo.dbLocation) {
+          successfulResetMsg += ` at "${datasourceInfo.dbLocation}"`
+        }
+
+        successfulResetMsg += ` ${schemasLength > 1 ? 'were' : 'was'} successfully reset.\n`
+        process.stdout.write(successfulResetMsg)
+
+        wasDatabaseReset = true
+      }
+
+      const before = Math.round(performance.now())
+      let migration: EngineResults.SchemaPush
+      try {
+        if (args['--accept-data-loss']) {
+          aiAgentConfirmationCheckpoint()
+        }
+
+        migration = await migrate.push({
+          force: args['--accept-data-loss'],
+        })
       } catch (e) {
         await migrate.stop()
         throw e
       }
 
-      let successfulResetMsg = `The ${datasourceInfo.prettyProvider} database`
-      if (datasourceInfo.dbName) {
-        successfulResetMsg += ` "${datasourceInfo.dbName}"`
-      }
+      if (migration.unexecutable && migration.unexecutable.length > 0) {
+        const messages: string[] = []
+        messages.push(`${bold(red('\n⚠️ We found changes that cannot be executed:\n'))}`)
+        for (const item of migration.unexecutable) {
+          messages.push(`  • ${item}`)
+        }
+        process.stdout.write('\n') // empty line
 
-      const schemasLength = datasourceInfo.schemas?.length || 0
-      // If schemas are defined in the datasource block, print them
-      if (datasourceInfo.schemas && schemasLength > 0) {
-        successfulResetMsg += ` schema${schemasLength > 1 ? 's' : ''} "${datasourceInfo.schemas.join(', ')}"`
-      }
-      // Otherwise, print the schema if it's defined in the connection string
-      else if (datasourceInfo.schema) {
-        successfulResetMsg += ` schema "${datasourceInfo.schema}"`
-      }
-
-      if (datasourceInfo.dbLocation) {
-        successfulResetMsg += ` at "${datasourceInfo.dbLocation}"`
-      }
-
-      successfulResetMsg += ` ${schemasLength > 1 ? 'were' : 'was'} successfully reset.\n`
-      process.stdout.write(successfulResetMsg)
-
-      wasDatabaseReset = true
-    }
-
-    const before = Math.round(performance.now())
-    let migration: EngineResults.SchemaPush
-    try {
-      if (args['--accept-data-loss']) {
-        aiAgentConfirmationCheckpoint()
-      }
-
-      migration = await migrate.push({
-        force: args['--accept-data-loss'],
-      })
-    } catch (e) {
-      await migrate.stop()
-      throw e
-    }
-
-    if (migration.unexecutable && migration.unexecutable.length > 0) {
-      const messages: string[] = []
-      messages.push(`${bold(red('\n⚠️ We found changes that cannot be executed:\n'))}`)
-      for (const item of migration.unexecutable) {
-        messages.push(`  • ${item}`)
-      }
-      process.stdout.write('\n') // empty line
-
-      await migrate.stop()
-      throw new Error(`${messages.join('\n')}\n
+        await migrate.stop()
+        throw new Error(`${messages.join('\n')}\n
 You may use the --force-reset flag to drop the database before push like ${bold(
-        green(getCommandWithExecutor(`${this.cliCommand} db push --force-reset`)),
-      )}
+          green(getCommandWithExecutor(`${this.cliCommand} db push --force-reset`)),
+        )}
 ${bold(red('All data will be lost.'))}
       `)
-    }
-
-    if (migration.warnings && migration.warnings.length > 0) {
-      process.stdout.write(bold(yellow(`\n⚠️  There might be data loss when applying the changes:\n\n`)))
-
-      for (const warning of migration.warnings) {
-        process.stdout.write(`  • ${warning}\n\n`)
       }
-      process.stdout.write('\n') // empty line
 
-      if (!args['--accept-data-loss']) {
-        if (!canPrompt()) {
-          await migrate.stop()
-          throw new DbPushIgnoreWarningsWithFlagError(this.cliCommand)
+      if (migration.warnings && migration.warnings.length > 0) {
+        process.stdout.write(bold(yellow(`\n⚠️  There might be data loss when applying the changes:\n\n`)))
+
+        for (const warning of migration.warnings) {
+          process.stdout.write(`  • ${warning}\n\n`)
         }
-
         process.stdout.write('\n') // empty line
-        const confirmation = await prompt({
-          type: 'confirm',
-          name: 'value',
-          message: `Do you want to ignore the warning(s)?`,
-        })
 
-        if (!confirmation.value) {
-          process.stdout.write('Push cancelled.\n')
-          await migrate.stop()
-          // Return SIGINT exit code to signal that the process was cancelled.
-          process.exit(130)
-        }
+        if (!args['--accept-data-loss']) {
+          if (!canPrompt()) {
+            await migrate.stop()
+            throw new DbPushIgnoreWarningsWithFlagError(this.cliCommand)
+          }
 
-        try {
-          aiAgentConfirmationCheckpoint()
-
-          await migrate.push({
-            force: true,
+          process.stdout.write('\n') // empty line
+          const confirmation = await prompt({
+            type: 'confirm',
+            name: 'value',
+            message: `Do you want to ignore the warning(s)?`,
           })
-        } catch (e) {
-          await migrate.stop()
-          throw e
+
+          if (!confirmation.value) {
+            process.stdout.write('Push cancelled.\n')
+            await migrate.stop()
+            // Return SIGINT exit code to signal that the process was cancelled.
+            process.exit(130)
+          }
+
+          try {
+            aiAgentConfirmationCheckpoint()
+
+            await migrate.push({
+              force: true,
+            })
+          } catch (e) {
+            await migrate.stop()
+            throw e
+          }
         }
       }
+
+      await migrate.stop()
+
+      if (!wasDatabaseReset && migration.warnings.length === 0 && migration.executedSteps === 0) {
+        process.stdout.write(`\nThe database is already in sync with the Prisma schema.\n`)
+      } else {
+        const migrationTimeMessage = `Done in ${formatms(Math.round(performance.now()) - before)}`
+        const rocketEmoji = process.platform === 'win32' ? '' : '🚀  '
+        const migrationSuccessStdMessage = 'Your database is now in sync with your Prisma schema.'
+        const migrationSuccessMongoMessage = 'Your database indexes are now in sync with your Prisma schema.'
+
+        const provider = schemaContext.primaryDatasource?.activeProvider
+
+        process.stdout.write(
+          `\n${rocketEmoji}${
+            provider === 'mongodb' ? migrationSuccessMongoMessage : migrationSuccessStdMessage
+          } ${migrationTimeMessage}\n`,
+        )
+      }
+
+      return ``
+    } finally {
+      await migrate.stop()
     }
-
-    await migrate.stop()
-
-    if (!wasDatabaseReset && migration.warnings.length === 0 && migration.executedSteps === 0) {
-      process.stdout.write(`\nThe database is already in sync with the Prisma schema.\n`)
-    } else {
-      const migrationTimeMessage = `Done in ${formatms(Math.round(performance.now()) - before)}`
-      const rocketEmoji = process.platform === 'win32' ? '' : '🚀  '
-      const migrationSuccessStdMessage = 'Your database is now in sync with your Prisma schema.'
-      const migrationSuccessMongoMessage = 'Your database indexes are now in sync with your Prisma schema.'
-
-      const provider = schemaContext.primaryDatasource?.activeProvider
-
-      process.stdout.write(
-        `\n${rocketEmoji}${
-          provider === 'mongodb' ? migrationSuccessMongoMessage : migrationSuccessStdMessage
-        } ${migrationTimeMessage}\n`,
-      )
-    }
-
-    return ``
   }
 
   public help(error?: string): string | HelpError {

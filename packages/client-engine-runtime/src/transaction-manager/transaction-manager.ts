@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { Debug } from '@prisma/debug'
 import { SqlDriverAdapter, SqlQuery, SqlQueryable, Transaction } from '@prisma/driver-adapter-utils'
 
@@ -589,8 +590,9 @@ export class TransactionManager {
     if (!options.timeout) throw new TransactionManagerError('timeout is required')
     if (!options.maxWait) throw new TransactionManagerError('maxWait is required')
 
-    // Snapshot level only supported for MS SQL Server, which is not supported via driver adapters so far.
-    if (options.isolationLevel === 'SNAPSHOT') throw new InvalidTransactionIsolationLevelError(options.isolationLevel)
+    if (options.isolationLevel === 'SNAPSHOT' && (this.#provider ?? this.driverAdapter.provider) !== 'firebird') {
+      throw new InvalidTransactionIsolationLevelError(options.isolationLevel)
+    }
 
     return {
       ...options,

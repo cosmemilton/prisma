@@ -1,8 +1,9 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import type { ErrorCapturingSqlDriverAdapterFactory } from '@prisma/driver-adapter-utils'
-import type { ConstructorOptions, SchemaEngine } from '@prisma/schema-engine-wasm'
+import type { ConstructorOptions, DiffParams } from '@prisma/schema-engine-wasm'
 
 async function getSchemaEngineWasModule() {
   const runtimeBase = path.join(__dirname, '..', 'build')
@@ -27,11 +28,19 @@ async function getSchemaEngineWasmInstance() {
   const wbindgen_start = instance.exports.__wbindgen_start as () => void
   runtime.__wbg_set_wasm(instance.exports)
   wbindgen_start()
-  return runtime.SchemaEngine
+  return runtime
 }
 
-let loadedWasmInstance: typeof SchemaEngine
+// Share initialization between connected engines and pure datamodel operations.
+// wasm-bindgen cannot initialize its module globals twice, including concurrently.
+let loadedWasmInstance: ReturnType<typeof getSchemaEngineWasmInstance> | undefined
+function loadRuntime() {
+  return (loadedWasmInstance ??= getSchemaEngineWasmInstance())
+}
 export const wasmSchemaEngineLoader = {
+  async diffDatamodels(input: DiffParams) {
+    return (await loadRuntime()).diffDatamodels(input)
+  },
   async loadSchemaEngine(
     input: ConstructorOptions,
     debug: (arg: string) => void,
@@ -40,10 +49,6 @@ export const wasmSchemaEngineLoader = {
     // we only create the instance once for efficiency and also because wasm
     // bindgen keeps an internal cache of its instance already, when the wasm
     // compiler is loaded more than once it crashes with `unwrap_throw failed`.
-    if (loadedWasmInstance === undefined) {
-      loadedWasmInstance = await getSchemaEngineWasmInstance()
-    }
-
-    return await loadedWasmInstance.new(input, debug, adapter)
+    return (await loadRuntime()).SchemaEngine.new(input, debug, adapter)
   },
 }

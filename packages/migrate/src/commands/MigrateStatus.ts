@@ -1,3 +1,5 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import type { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import {
@@ -108,8 +110,6 @@ export class MigrateStatus implements Command {
       extensions: config['extensions'],
     })
 
-    await ensureCanConnectToDatabase(baseDir, validatedConfig)
-
     // This is a *read-only* command (modulo shadow database).
     // - ↩️ **RPC**: ****`diagnoseMigrationHistory`, then four cases based on the response.
     //     4. Otherwise, there is no problem migrate is aware of. We could still display:
@@ -121,6 +121,7 @@ export class MigrateStatus implements Command {
     let listMigrationDirectoriesResult: EngineResults.ListMigrationDirectoriesOutput
 
     try {
+      await ensureCanConnectToDatabase(baseDir, validatedConfig)
       diagnoseResult = await migrate.diagnoseMigrationHistory({
         optInToShadowDatabase: false,
       })

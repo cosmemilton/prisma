@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type * as DMMF from '@prisma/dmmf'
 
 import { SqlQueryOutput } from './typedSql'
@@ -45,6 +46,7 @@ export type ConnectorType =
   | 'prisma+postgres' // Note: used for Prisma Postgres, managed by PDP
   | 'sqlserver'
   | 'cockroachdb'
+  | 'firebird'
 
 export type ActiveConnectorType = Exclude<ConnectorType, 'postgres' | 'prisma+postgres'>
 

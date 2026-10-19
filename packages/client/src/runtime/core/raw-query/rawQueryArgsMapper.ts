@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { Sql } from '@prisma/client-runtime-utils'
 import { Debug } from '@prisma/debug'
 
@@ -59,6 +60,7 @@ export const rawQueryArgsMapper =
       // If this was called as prisma.$executeRaw`<SQL>` try to generate a SQL prepared statement
       switch (activeProvider) {
         case 'sqlite':
+        case 'firebird':
         case 'mysql': {
           queryString = args.sql
           parameters = {

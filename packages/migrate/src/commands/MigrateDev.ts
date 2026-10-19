@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import path from 'node:path'
 
 import type { PrismaConfigInternal } from '@prisma/config'
@@ -156,172 +157,176 @@ export class MigrateDev implements Command {
       extensions: cmdSpecificConfig['extensions'],
     })
 
-    let devDiagnostic: EngineResults.DevDiagnosticOutput
     try {
-      devDiagnostic = await migrate.devDiagnostic()
-      debug({ devDiagnostic: JSON.stringify(devDiagnostic, null, 2) })
-    } catch (e) {
-      await migrate.stop()
-      throw e
-    }
-
-    const migrationIdsApplied: string[] = []
-
-    if (devDiagnostic.action.tag === 'reset') {
-      this.logResetReason({
-        datasourceInfo,
-        reason: devDiagnostic.action.reason,
-      })
-
-      process.stdout.write(
-        '\n' +
-          `You may use ${red(`${this.cliCommand} migrate reset`)} to drop the development database.\n` +
-          `${bold(red('All data will be lost.'))}\n`,
-      )
-      await migrate.stop()
-      // Return SIGINT exit code to signal that the process was cancelled.
-      process.exit(130)
-    }
-
-    try {
-      const { appliedMigrationNames } = await migrate.applyMigrations()
-      migrationIdsApplied.push(...appliedMigrationNames)
-
-      // Inform user about applied migrations now
-      if (appliedMigrationNames.length > 0) {
-        process.stdout.write(
-          `\nThe following migration(s) have been applied:\n\n${printFilesFromMigrationIds(
-            'migrations',
-            appliedMigrationNames,
-            {
-              'migration.sql': '',
-            },
-          )}\n`,
-        )
+      let devDiagnostic: EngineResults.DevDiagnosticOutput
+      try {
+        devDiagnostic = await migrate.devDiagnostic()
+        debug({ devDiagnostic: JSON.stringify(devDiagnostic, null, 2) })
+      } catch (e) {
+        await migrate.stop()
+        throw e
       }
-    } catch (e) {
-      await migrate.stop()
-      throw e
-    }
 
-    let evaluateDataLossResult: EngineResults.EvaluateDataLossOutput
-    try {
-      evaluateDataLossResult = await migrate.evaluateDataLoss()
-      debug({ evaluateDataLossResult })
-    } catch (e) {
-      await migrate.stop()
-      throw e
-    }
+      const migrationIdsApplied: string[] = []
 
-    // display unexecutableSteps
-    // throws error if not create-only
-    const unexecutableStepsError = handleUnexecutableSteps(
-      evaluateDataLossResult.unexecutableSteps,
-      this.cliCommand,
-      args['--create-only'],
-    )
-    if (unexecutableStepsError) {
-      await migrate.stop()
-      throw new Error(unexecutableStepsError)
-    }
-
-    // log warnings and prompt user to continue if needed
-    if (evaluateDataLossResult.warnings && evaluateDataLossResult.warnings.length > 0) {
-      process.stdout.write(bold(`\n⚠️  Warnings for the current datasource:\n\n`))
-      for (const warning of evaluateDataLossResult.warnings) {
-        process.stdout.write(`  • ${warning.message}\n`)
-      }
-      process.stdout.write('\n') // empty line
-
-      if (!args['--force']) {
-        if (!canPrompt()) {
-          await migrate.stop()
-          throw new MigrateDevEnvNonInteractiveError(this.cliCommand)
-        }
-
-        const message = args['--create-only']
-          ? 'Are you sure you want to create this migration?'
-          : 'Are you sure you want to create and apply this migration?'
-        const confirmation = await prompt({
-          type: 'confirm',
-          name: 'value',
-          message,
+      if (devDiagnostic.action.tag === 'reset') {
+        this.logResetReason({
+          datasourceInfo,
+          reason: devDiagnostic.action.reason,
         })
 
-        if (!confirmation.value) {
-          process.stdout.write('Migration cancelled.\n')
-          await migrate.stop()
-          // Return SIGINT exit code to signal that the process was cancelled.
-          process.exit(130)
-        }
-      }
-    }
-
-    let migrationName: undefined | string = undefined
-    if (evaluateDataLossResult.migrationSteps > 0 || args['--create-only']) {
-      const getMigrationNameResult = await getMigrationName(args['--name'])
-
-      if (getMigrationNameResult.userCancelled) {
-        process.stdout.write(getMigrationNameResult.userCancelled + '\n')
+        process.stdout.write(
+          '\n' +
+            `You may use ${red(`${this.cliCommand} migrate reset`)} to drop the development database.\n` +
+            `${bold(red('All data will be lost.'))}\n`,
+        )
         await migrate.stop()
         // Return SIGINT exit code to signal that the process was cancelled.
         process.exit(130)
-      } else {
-        migrationName = getMigrationNameResult.name
       }
-    }
 
-    let migrationIds: string[]
-    try {
-      const createMigrationResult = await migrate.createMigration({
-        migrationName: migrationName || '',
-        draft: args['--create-only'] ? true : false,
-        schema: migrate.getPrismaSchema(),
-      })
-      debug({ createMigrationResult })
+      try {
+        const { appliedMigrationNames } = await migrate.applyMigrations()
+        migrationIdsApplied.push(...appliedMigrationNames)
 
-      if (args['--create-only']) {
+        // Inform user about applied migrations now
+        if (appliedMigrationNames.length > 0) {
+          process.stdout.write(
+            `\nThe following migration(s) have been applied:\n\n${printFilesFromMigrationIds(
+              'migrations',
+              appliedMigrationNames,
+              {
+                'migration.sql': '',
+              },
+            )}\n`,
+          )
+        }
+      } catch (e) {
         await migrate.stop()
-
-        return `Prisma Migrate created the following migration without applying it ${printMigrationId(
-          createMigrationResult.generatedMigrationName!,
-        )}\n\nYou can now edit it and apply it by running ${green(getCommandWithExecutor(`${this.cliCommand} migrate dev`))}.`
+        throw e
       }
 
-      const { appliedMigrationNames } = await migrate.applyMigrations()
-      migrationIds = appliedMigrationNames
-    } finally {
-      // Stop engine
-      await migrate.stop()
-    }
+      let evaluateDataLossResult: EngineResults.EvaluateDataLossOutput
+      try {
+        evaluateDataLossResult = await migrate.evaluateDataLoss()
+        debug({ evaluateDataLossResult })
+      } catch (e) {
+        await migrate.stop()
+        throw e
+      }
 
-    // For display only, empty line
-    migrationIdsApplied.length > 0 && process.stdout.write('\n')
+      // display unexecutableSteps
+      // throws error if not create-only
+      const unexecutableStepsError = handleUnexecutableSteps(
+        evaluateDataLossResult.unexecutableSteps,
+        this.cliCommand,
+        args['--create-only'],
+      )
+      if (unexecutableStepsError) {
+        await migrate.stop()
+        throw new Error(unexecutableStepsError)
+      }
 
-    if (migrationIds.length === 0) {
-      if (migrationIdsApplied.length > 0) {
-        process.stdout.write(`${green('Your database is now in sync with your schema.')}\n`)
+      // log warnings and prompt user to continue if needed
+      if (evaluateDataLossResult.warnings && evaluateDataLossResult.warnings.length > 0) {
+        process.stdout.write(bold(`\n⚠️  Warnings for the current datasource:\n\n`))
+        for (const warning of evaluateDataLossResult.warnings) {
+          process.stdout.write(`  • ${warning.message}\n`)
+        }
+        process.stdout.write('\n') // empty line
+
+        if (!args['--force']) {
+          if (!canPrompt()) {
+            await migrate.stop()
+            throw new MigrateDevEnvNonInteractiveError(this.cliCommand)
+          }
+
+          const message = args['--create-only']
+            ? 'Are you sure you want to create this migration?'
+            : 'Are you sure you want to create and apply this migration?'
+          const confirmation = await prompt({
+            type: 'confirm',
+            name: 'value',
+            message,
+          })
+
+          if (!confirmation.value) {
+            process.stdout.write('Migration cancelled.\n')
+            await migrate.stop()
+            // Return SIGINT exit code to signal that the process was cancelled.
+            process.exit(130)
+          }
+        }
+      }
+
+      let migrationName: undefined | string = undefined
+      if (evaluateDataLossResult.migrationSteps > 0 || args['--create-only']) {
+        const getMigrationNameResult = await getMigrationName(args['--name'])
+
+        if (getMigrationNameResult.userCancelled) {
+          process.stdout.write(getMigrationNameResult.userCancelled + '\n')
+          await migrate.stop()
+          // Return SIGINT exit code to signal that the process was cancelled.
+          process.exit(130)
+        } else {
+          migrationName = getMigrationNameResult.name
+        }
+      }
+
+      let migrationIds: string[]
+      try {
+        const createMigrationResult = await migrate.createMigration({
+          migrationName: migrationName || '',
+          draft: args['--create-only'] ? true : false,
+          schema: migrate.getPrismaSchema(),
+        })
+        debug({ createMigrationResult })
+
+        if (args['--create-only']) {
+          await migrate.stop()
+
+          return `Prisma Migrate created the following migration without applying it ${printMigrationId(
+            createMigrationResult.generatedMigrationName!,
+          )}\n\nYou can now edit it and apply it by running ${green(getCommandWithExecutor(`${this.cliCommand} migrate dev`))}.`
+        }
+
+        const { appliedMigrationNames } = await migrate.applyMigrations()
+        migrationIds = appliedMigrationNames
+      } finally {
+        // Stop engine
+        await migrate.stop()
+      }
+
+      // For display only, empty line
+      migrationIdsApplied.length > 0 && process.stdout.write('\n')
+
+      if (migrationIds.length === 0) {
+        if (migrationIdsApplied.length > 0) {
+          process.stdout.write(`${green('Your database is now in sync with your schema.')}\n`)
+        } else {
+          process.stdout.write(`Already in sync, no schema change or pending migration was found.\n`)
+        }
       } else {
-        process.stdout.write(`Already in sync, no schema change or pending migration was found.\n`)
-      }
-    } else {
-      // e.g., "./prisma/custom-migrations"
-      const migrationsDirPathRelative = path.relative(process.cwd(), migrationsDirPath)
+        // e.g., "./prisma/custom-migrations"
+        const migrationsDirPathRelative = path.relative(process.cwd(), migrationsDirPath)
 
-      process.stdout.write(
-        `\nThe following migration(s) have been created and applied from new schema changes:\n\n${printFilesFromMigrationIds(
-          migrationsDirPathRelative,
-          migrationIds,
-          {
-            'migration.sql': '',
-          },
-        )}
+        process.stdout.write(
+          `\nThe following migration(s) have been created and applied from new schema changes:\n\n${printFilesFromMigrationIds(
+            migrationsDirPathRelative,
+            migrationIds,
+            {
+              'migration.sql': '',
+            },
+          )}
 
 ${green('Your database is now in sync with your schema.')}\n`,
-      )
-    }
+        )
+      }
 
-    return ''
+      return ''
+    } finally {
+      await migrate.stop()
+    }
   }
 
   private logResetReason({ datasourceInfo, reason }: { datasourceInfo: DatasourceInfo; reason: string }) {

@@ -1,3 +1,5 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import { SchemaEngineConfigInternal } from '@prisma/config'
 import { MigrateTypes, SchemaContext, toSchemasContainer } from '@prisma/internals'
 
@@ -6,6 +8,7 @@ import type { SchemaEngine } from './SchemaEngine'
 import { SchemaEngineCLI } from './SchemaEngineCLI'
 import type { EngineArgs, EngineResults } from './types'
 import { createMigration, writeMigrationLockfile, writeMigrationScript } from './utils/createMigration'
+import { isFirebirdUrl, setupFirebirdSchemaEngine } from './utils/firebirdSchemaEngine'
 import { listMigrations } from './utils/listMigrations'
 
 type MigrateSetupInput = {
@@ -48,6 +51,18 @@ export class Migrate {
   static async setup({ schemaContext, schemaEngineConfig, ...rest }: MigrateSetupInput): Promise<Migrate> {
     const schemaEngine = await (async () => {
       const datasource = schemaEngineConfig.datasource
+      if (schemaContext?.primaryDatasource?.provider === 'firebird' || isFirebirdUrl(datasource?.url)) {
+        return setupFirebirdSchemaEngine({
+          datasource,
+          schemaContext,
+          enabledPreviewFeatures: rest.enabledPreviewFeatures,
+        })
+      }
+      if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+        throw new Error(
+          'This local Firebird CLI profile supports only Firebird database commands. Use the default CLI build for other providers.',
+        )
+      }
       return await SchemaEngineCLI.setup({ datasource, schemaContext, ...rest })
     })()
 

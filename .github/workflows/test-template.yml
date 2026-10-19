@@ -1,3 +1,4 @@
+# Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md.
 name: CI Template job
 
 on:
@@ -919,6 +920,10 @@ jobs:
       - run: pnpm run test
         name: 'adapter-pg'
         working-directory: packages/adapter-pg
+
+      - run: pnpm run test
+        name: 'adapter-firebird'
+        working-directory: packages/adapter-firebird
 
       - run: pnpm run test
         name: 'adapter-planetscale'

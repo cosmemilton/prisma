@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import timers from 'node:timers/promises'
 
 import type { SqlDriverAdapter, SqlQuery, SqlResultSet, Transaction } from '@prisma/driver-adapter-utils'
@@ -564,7 +565,7 @@ test('with explicit isolation level', async () => {
   await expect(transactionManager.rollbackTransaction(id)).rejects.toBeInstanceOf(TransactionClosedError)
 })
 
-test('with isolation level only supported in MS SQL Server, "snapshot"', async () => {
+test('rejects snapshot isolation for providers that do not support it', async () => {
   const driverAdapter = new MockDriverAdapter()
   const transactionManager = new TransactionManager({
     driverAdapter,
@@ -575,6 +576,23 @@ test('with isolation level only supported in MS SQL Server, "snapshot"', async (
   await expect(startTransaction(transactionManager, { isolationLevel: 'SNAPSHOT' })).rejects.toBeInstanceOf(
     InvalidTransactionIsolationLevelError,
   )
+})
+
+test('passes snapshot isolation to the Firebird adapter and uses its transaction callbacks', async () => {
+  const driverAdapter = new MockDriverAdapter({ provider: 'firebird', usePhantomQuery: true })
+  const start = vi.spyOn(driverAdapter, 'startTransaction')
+  const transactionManager = new TransactionManager({
+    driverAdapter,
+    transactionOptions: TRANSACTION_OPTIONS,
+    tracingHelper: noopTracingHelper,
+  })
+
+  const id = await startTransaction(transactionManager, { isolationLevel: 'SNAPSHOT' })
+  await transactionManager.commitTransaction(id)
+
+  expect(start).toHaveBeenCalledWith('SNAPSHOT')
+  expect(driverAdapter.commitMock).toHaveBeenCalledOnce()
+  expect(driverAdapter.executeRawMock).not.toHaveBeenCalled()
 })
 
 test('transaction times out during starting', async () => {

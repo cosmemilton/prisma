@@ -1,3 +1,5 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import type { ConnectorType } from '@prisma/generator'
 import path from 'path'
 import * as NodeURL from 'url'
@@ -42,6 +44,8 @@ export function credentialsToUri(credentials: DatabaseCredentials): string {
     }
   } else if (credentials.type === 'mongodb') {
     url.pathname = '/' + credentials.database
+  } else if (credentials.type === 'firebird') {
+    url.pathname = '/' + encodeURIComponent(credentials.database ?? '')
   }
 
   if (credentials.ssl) {
@@ -50,11 +54,11 @@ export function credentialsToUri(credentials: DatabaseCredentials): string {
   }
 
   if (credentials.user) {
-    url.username = credentials.user
+    url.username = credentials.type === 'firebird' ? encodeURIComponent(credentials.user) : credentials.user
   }
 
   if (credentials.password) {
-    url.password = credentials.password
+    url.password = credentials.type === 'firebird' ? encodeURIComponent(credentials.password) : credentials.password
   }
 
   if (credentials.port) {
@@ -130,10 +134,14 @@ export function uriToCredentials(connectionString: string): DatabaseCredentials 
   return {
     type,
     host: exists(uri.hostname) ? uri.hostname : undefined,
-    user: exists(uri.username) ? uri.username : undefined,
+    user: exists(uri.username) ? (type === 'firebird' ? decodeURIComponent(uri.username) : uri.username) : undefined,
     port: exists(uri.port) ? Number(uri.port) : undefined,
-    password: exists(uri.password) ? uri.password : undefined,
-    database,
+    password: exists(uri.password)
+      ? type === 'firebird'
+        ? decodeURIComponent(uri.password)
+        : uri.password
+      : undefined,
+    database: type === 'firebird' && database !== undefined ? decodeURIComponent(database) : database,
     schema: schema || undefined,
     uri: connectionString,
     ssl: Boolean(uri.searchParams.get('sslmode')),
@@ -156,6 +164,8 @@ function databaseTypeToProtocol(databaseType: ConnectorType) {
       return 'file:'
     case 'sqlserver':
       return 'sqlserver:'
+    case 'firebird':
+      return 'firebird:'
   }
 
   throw new Error(`Unknown databaseType ${databaseType}`)
@@ -181,6 +191,8 @@ export function protocolToConnectorType(protocol: string): ConnectorType {
       return 'sqlite'
     case 'sqlserver:':
       return 'sqlserver'
+    case 'firebird:':
+      return 'firebird'
   }
 
   throw new Error(`Unknown protocol ${protocol}`)

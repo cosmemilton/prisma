@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { expect, test } from 'vitest'
 
 import { rethrowAsUserFacing, rethrowAsUserFacingRawError, UserFacingError } from './user-facing-error'
@@ -96,6 +97,17 @@ test.each([
     },
     expectedMessage: "Database error. Code: `208`. Message: `Invalid object name 'Post'.`",
   },
+  {
+    label: 'Firebird',
+    cause: {
+      kind: 'firebird',
+      code: 335544569,
+      message: 'Dynamic SQL Error',
+      originalCode: '335544569',
+      originalMessage: 'Dynamic SQL Error',
+    },
+    expectedMessage: 'Database error. Code: `335544569`. Message: `Dynamic SQL Error`',
+  },
 ])('rethrowAsUserFacing wraps unmapped $label errors as P2039 UserFacingError', ({ cause, expectedMessage }) => {
   const error = makeDriverAdapterError(cause)
 
@@ -168,6 +180,23 @@ test('rethrowAsUserFacingRawError uses P2010 with the original DB error details'
       'Raw query failed. Code: `23505`. Message: `duplicate key value violates unique constraint "User_email_key"`',
     )
   }
+})
+
+test('raw Firebird errors preserve the database details as P2010', () => {
+  const error = makeDriverAdapterError({
+    kind: 'firebird',
+    code: 335544569,
+    message: 'Dynamic SQL Error',
+    originalCode: '335544569',
+    originalMessage: 'Dynamic SQL Error',
+  })
+
+  expect(() => rethrowAsUserFacingRawError(error)).toThrow(
+    expect.objectContaining({
+      code: 'P2010',
+      message: 'Raw query failed. Code: `335544569`. Message: `Dynamic SQL Error`',
+    }),
+  )
 })
 
 test('rethrowAsUserFacing still wraps specifically-mapped kinds with their dedicated code', () => {

@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { type Context, type Span, SpanKind, type SpanOptions } from '@opentelemetry/api'
 import type { SqlQuery } from '@prisma/driver-adapter-utils'
 
@@ -38,6 +39,7 @@ export function providerToOtelSystem(provider: SchemaProvider): string {
     case 'sqlite':
     case 'cockroachdb':
     case 'mongodb':
+    case 'firebird':
       return provider
     default:
       assertNever(provider, `Unknown provider: ${provider}`)

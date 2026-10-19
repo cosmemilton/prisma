@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { createDefaultRegistry } from '@prisma/client-generator-registry'
 import type { PrismaConfigInternal } from '@prisma/config'
 import { enginesVersion } from '@prisma/engines'
@@ -275,7 +276,7 @@ ${breakingChangesStr}${versionsWarning}${globalLocalVersionWarningStr}`
       if (this.hasGeneratorErrored) {
         throw new Error(message)
       } else {
-        if (!hideHints) {
+        if (!hideHints && process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird') {
           // at most one prompt per generate run: the offer preempts the survey
           const { prompted } = await this.skillsOfferHandler()
           if (!prompted) {

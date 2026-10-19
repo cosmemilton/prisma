@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import path from 'node:path'
 
 import type { PrismaConfigInternal } from '@prisma/config'
@@ -62,8 +63,10 @@ export class Version implements Command {
       return this.help()
     }
 
-    const engineResult = await resolveEngine(BinaryType.SchemaEngineBinary)
-    const [enginesInfo, schemaEngineRetrievalErrors] = getEnginesInfo(engineResult)
+    const [enginesInfo, schemaEngineRetrievalErrors] =
+      process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+        ? ([`Wasm (Firebird): ${wasm.schemaEngineWasmVersion}`, []] as const)
+        : getEnginesInfo(await resolveEngine(BinaryType.SchemaEngineBinary))
 
     const schemaEngineRows = [['Schema Engine', enginesInfo] as const]
 
@@ -83,7 +86,9 @@ export class Version implements Command {
       ...schemaEngineRows,
 
       ['Default Engines Hash', enginesVersion],
-      ['Studio', packageJson.dependencies['@prisma/studio-core']],
+      ...(process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird'
+        ? []
+        : [['Studio', packageJson.dependencies['@prisma/studio-core']]]),
       ['Prisma CLI Path', prismaCliPath],
     ]
 

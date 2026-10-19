@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -29,9 +30,6 @@ import { FileWriter } from './init/file-writer'
 import { isBun } from './init/is-bun'
 import { printPpgInitOutput, successMessage } from './init/ppg-output'
 import { installSkills } from './init/skill-install'
-import { login } from './management-api/auth'
-import { createAuthenticatedManagementAPI } from './management-api/auth-client'
-import { FileTokenStorage } from './management-api/token-storage'
 import {
   type CliDistributionIdentity,
   getCliDistributionConfigPackageName,
@@ -118,32 +116,38 @@ export const defaultEnv = async (
   identity: CliDistributionIdentity,
 ) => {
   if (url === undefined) {
-    // TODO: bundle the CLI to ESM instead of CommonJS and make these module-level imports
-    const [{ startPrismaDevServer }, { ServerState }] = await Promise.all([
-      import('@prisma/dev'),
-      import('@prisma/dev/internal/state'),
-    ])
+    if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+      throw new Error(
+        'Firebird init requires an explicit URL placeholder; it never starts a development database server.',
+      )
+    } else {
+      // TODO: bundle the CLI to ESM instead of CommonJS and make these module-level imports
+      const [{ startPrismaDevServer }, { ServerState }] = await Promise.all([
+        import('@prisma/dev'),
+        import('@prisma/dev/internal/state'),
+      ])
 
-    let created = false
-    const state =
-      (await ServerState.fromServerDump({ debug })) ||
-      ((created = true), await ServerState.createExclusively({ debug, persistenceMode: 'stateful' }))
+      let created = false
+      const state =
+        (await ServerState.fromServerDump({ debug })) ||
+        ((created = true), await ServerState.createExclusively({ debug, persistenceMode: 'stateful' }))
 
-    if (created) {
-      await state.close()
+      if (created) {
+        await state.close()
+      }
+
+      const server = await startPrismaDevServer({
+        databasePort: state.databasePort,
+        dryRun: true,
+        name: state.name,
+        persistenceMode: 'stateful',
+        port: state.port,
+        shadowDatabasePort: state.shadowDatabasePort,
+        debug,
+      })
+
+      url = server.ppg.url
     }
-
-    const server = await startPrismaDevServer({
-      databasePort: state.databasePort,
-      dryRun: true,
-      name: state.name,
-      persistenceMode: 'stateful',
-      port: state.port,
-      shadowDatabasePort: state.shadowDatabasePort,
-      debug,
-    })
-
-    url = server.ppg.url
   }
 
   let env = comments
@@ -170,6 +174,8 @@ export const defaultPort = (datasourceProvider: ConnectorType) => {
   switch (datasourceProvider) {
     case 'mysql':
       return 3306
+    case 'firebird':
+      return 3050
     case 'sqlserver':
       return 1433
     case 'mongodb':
@@ -203,6 +209,8 @@ export const defaultURL = (
       return `mongodb+srv://root:randompassword@cluster0.ab1cd.mongodb.net/mydb?retryWrites=true&w=majority`
     case 'sqlite':
       return 'file:./dev.db'
+    case 'firebird':
+      return `firebird://USER:PASSWORD@127.0.0.1:${port}/ABSOLUTE_DATABASE_PATH`
     default:
       return undefined
   }
@@ -241,6 +249,27 @@ export const defaultConfig = ({ prismaFolder, runtime, identity }: DefaultConfig
   const packageName = getCliDistributionPackageName(identity)
   const schemaPath = path.relative(process.cwd(), path.join(prismaFolder, 'schema.prisma'))
   const migrationsPath = path.relative(process.cwd(), path.join(prismaFolder, 'migrations'))
+
+  if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+    return `\
+// Generated for the local Firebird profile (Node.js 24 or newer).
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+import { defineConfig } from "${configPackage}";
+
+const envFile = new URL(".env", import.meta.url);
+if (existsSync(envFile)) loadEnvFile(envFile);
+
+export default defineConfig({
+  schema: ${normalizePath(schemaPath)},
+  migrations: { path: ${normalizePath(migrationsPath)} },
+  datasource: {
+    url: process.env["DATABASE_URL"],
+    shadowDatabaseUrl: process.env["SHADOW_DATABASE_URL"],
+  },
+});
+`
+  }
 
   const configSrc = match({ runtime })
     .with({ runtime: 'bun' }, () => {
@@ -330,6 +359,19 @@ export class Init implements Command {
       throw Error('The init command does not take any argument.')
     }
 
+    if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+      if (
+        args['--db'] ||
+        args['--prompt'] ||
+        args['--vibe'] ||
+        (args['--datasource-provider'] && args['--datasource-provider'].toLowerCase() !== 'firebird')
+      ) {
+        throw new Error(
+          'This local Firebird CLI profile initializes only Firebird projects and never provisions a database.',
+        )
+      }
+    }
+
     const { datasourceProvider, url } = await match(args)
       .with(
         {
@@ -353,6 +395,11 @@ export class Init implements Command {
         },
         async (input) => {
           const url = input['--url']
+          const datasourceProvider = protocolToConnectorType(`${url.split(':')[0]}:`)
+          if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird' && datasourceProvider !== 'firebird') {
+            throw new Error('This local Firebird CLI profile requires a firebird: datasource URL.')
+          }
+          if (datasourceProvider === 'firebird') return { datasourceProvider, url }
           const canConnect = await canConnectToDatabase(url)
           if (canConnect !== true) {
             const { code, message } = canConnect
@@ -367,11 +414,13 @@ export class Init implements Command {
             }
           }
 
-          const datasourceProvider = protocolToConnectorType(`${url.split(':')[0]}:`)
           return { datasourceProvider, url }
         },
       )
       .otherwise(() => {
+        if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+          return { datasourceProvider: 'firebird' as const, url: defaultURL('firebird') }
+        }
         return {
           datasourceProvider: 'postgresql' as const,
           url: undefined,
@@ -400,7 +449,12 @@ export class Init implements Command {
     let generatedSchema: string | undefined
     let generatedName: string | undefined
 
-    if (isPpgCommand) {
+    if (process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird' && isPpgCommand) {
+      const [{ login }, { createAuthenticatedManagementAPI }, { FileTokenStorage }] = await Promise.all([
+        import('./management-api/auth'),
+        import('./management-api/auth-client'),
+        import('./management-api/token-storage'),
+      ])
       const tokenStorage = new FileTokenStorage()
       const tokens = await tokenStorage.getTokens()
 
@@ -664,7 +718,7 @@ export class Init implements Command {
     }
 
     let skillsInstalled = false
-    if (!args['--no-skills']) {
+    if (process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird' && !args['--no-skills']) {
       const skillsSpinner = ora('Installing skills').start()
       const skillsResult = await installSkills({ cwd: outputDir })
       if (skillsResult.ok) {
@@ -698,6 +752,13 @@ ${connectExistingDatabaseSteps}
 CREATE NEW DATABASE:
   Local: ${green(`npx ${cliCommand} dev`)} (runs Postgres locally in your terminal)
   Cloud: ${green('npx create-db')} (creates a free Prisma Postgres database)`
+    } else if (datasourceProvider === 'firebird') {
+      setupDatabaseSection = `\
+Next, connect an existing Firebird database:
+  1. Provision the database separately and replace USER, PASSWORD and ABSOLUTE_DATABASE_PATH in .env.
+  2. Configure a separate shadowDatabaseUrl and explicit shadowDatabaseFileSystem=local opt-in only for migration shadow replay.
+  3. Run ${green(getCommandWithExecutor(`${cliCommand} db pull`))} to introspect the existing database.
+No database or server was created by init.`
     } else {
       setupDatabaseSection = `\
 Next, set up your database:
@@ -745,6 +806,24 @@ Learn more: ${link('https://pris.ly/getting-started')}
 }
 
 function createHelp(identity: CliDistributionIdentity): string {
+  if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+    return format(`
+Set up a Firebird Prisma project without connecting or provisioning a database.
+
+${bold('Usage')}
+  ${dim('$')} ${identity} init --datasource-provider firebird [options]
+
+${bold('Options')}
+  --help, -h              Display this help message
+  --datasource-provider   firebird (the default in this local profile)
+  --generator-provider    Generator provider; default: prisma-client
+  --output                Prisma Client output path
+  --url                   Existing Firebird URL, written to .env without connecting
+  --with-model            Include an example model
+
+Replace the generated connection placeholders and provision the database separately.
+`)
+  }
   return format(`
   Set up a new Prisma project
 
@@ -756,7 +835,7 @@ function createHelp(identity: CliDistributionIdentity): string {
 
              -h, --help   Display this help message
                    --db   Provisions a fully managed Prisma Postgres database on the Prisma Data Platform.
-  --datasource-provider   Define the datasource provider to use: postgresql, mysql, sqlite, sqlserver, mongodb or cockroachdb
+  --datasource-provider   Define the datasource provider to use: postgresql, mysql, sqlite, sqlserver, mongodb, cockroachdb or firebird
    --generator-provider   Define the generator provider to use. Default: \`prisma-client\`
       --preview-feature   Define a preview feature to use.
                --output   Define Prisma Client generator output path to use.
@@ -800,6 +879,7 @@ const DATASOURCE_PROVIDERS = [
   'sqlserver',
   'mongodb',
   'cockroachdb',
+  'firebird',
   'prismapostgres',
   'prisma+postgres',
 ] as const

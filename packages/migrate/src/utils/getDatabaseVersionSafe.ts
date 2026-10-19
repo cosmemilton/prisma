@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import { MigrateTypes } from '@prisma/internals'
@@ -23,8 +24,10 @@ export async function getDatabaseVersionSafe(
   } catch (e) {
     debug(e)
   } finally {
-    if (migrate && migrate.engine.isRunning) {
-      await migrate.stop()
+    try {
+      await migrate?.stop()
+    } catch (error) {
+      debug(error)
     }
   }
 

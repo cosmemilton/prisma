@@ -1,3 +1,4 @@
+# Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md.
 allowBuilds:
   '@swc/core': true
   better-sqlite3: true
@@ -15,6 +16,10 @@ autoInstallPeers: false
 savePrefix: ''
 
 overrides:
+  '@prisma/schema-engine-wasm': 'link:../prisma-engines-firebird/target/schema-engine-wasm'
+  # Paired experimental engines must be built first; see docs/firebird.md.
+  '@prisma/prisma-schema-wasm': 'link:../prisma-engines-firebird/target/prisma-schema-wasm'
+  '@prisma/query-compiler-wasm': 'link:../prisma-engines-firebird/target/query-compiler-wasm'
   form-data: '>=4.0.4'
   jws: '>=4.0.1'
   tar-fs: '>=2.1.4'

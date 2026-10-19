@@ -1,6 +1,8 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import { expect, test } from 'vitest'
 
-import { credentialsToUri, uriToCredentials } from '../convertCredentials'
+import { credentialsToUri, protocolToConnectorType, uriToCredentials } from '../convertCredentials'
 
 const uris = [
   'file:',
@@ -54,3 +56,29 @@ for (const uri of notIdenticalUris) {
     expect(uriFromCredentials).toMatchSnapshot()
   })
 }
+
+test.each([
+  ['C:%5Cpath%5Cfile.fdb', 'C:\\path\\file.fdb'],
+  ['%2Fvar%2Fdata%2Ffile.fdb', '/var/data/file.fdb'],
+])('decodes and preserves a Firebird database path', (encodedPath, database) => {
+  const credentials = uriToCredentials(`firebird://user%40domain:test%25value@127.0.0.1:3059/${encodedPath}`)
+
+  expect(credentials).toMatchObject({
+    type: 'firebird',
+    host: '127.0.0.1',
+    port: 3059,
+    user: 'user@domain',
+    password: 'test%value',
+    database,
+  })
+  expect(uriToCredentials(credentialsToUri(credentials))).toMatchObject({
+    type: 'firebird',
+    user: credentials.user,
+    password: credentials.password,
+    database,
+  })
+})
+
+test('recognizes the distinct Firebird protocol', () => {
+  expect(protocolToConnectorType('firebird:')).toBe('firebird')
+})

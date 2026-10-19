@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import {
@@ -183,135 +184,139 @@ Some information will be lost (relations, comments, mapped fields, @ignore...), 
       extensions: cmdSpecificConfig['extensions'],
     })
 
-    const engine = migrate.engine
-    const basedOn = firstDatasource
-      ? ` based on datasource defined in ${underline(schemaContext.loadedFromPathForLogMessages)}`
-      : ''
-    const introspectionSpinner = spinnerFactory(`Introspecting${basedOn}`)
-
-    const before = Math.round(performance.now())
-    let introspectionSchema: MigrateTypes.SchemasContainer | undefined = undefined
-    let introspectionWarnings: EngineArgs.IntrospectResult['warnings']
     try {
-      const directoryConfig = inferDirectoryConfig(schemaContext, cmdSpecificConfig)
-      const introspectionResult = await engine.introspect({
-        schema: toSchemasContainer(schema),
-        baseDirectoryPath: schemaContext?.schemaRootDir ?? process.cwd(),
-        viewsDirectoryPath: directoryConfig.viewsDirPath,
-        force: args['--force'],
-        compositeTypeDepth: args['--composite-type-depth'],
-        namespaces: args['--schemas']?.split(','),
-      })
+      const engine = migrate.engine
+      const basedOn = firstDatasource
+        ? ` based on datasource defined in ${underline(schemaContext.loadedFromPathForLogMessages)}`
+        : ''
+      const introspectionSpinner = spinnerFactory(`Introspecting${basedOn}`)
 
-      introspectionSchema = introspectionResult.schema
-      introspectionWarnings = introspectionResult.warnings
-      debug(`Introspection warnings`, introspectionWarnings)
-    } catch (e: any) {
-      introspectionSpinner.failure()
+      const before = Math.round(performance.now())
+      let introspectionSchema: MigrateTypes.SchemasContainer | undefined = undefined
+      let introspectionWarnings: EngineArgs.IntrospectResult['warnings']
+      try {
+        const directoryConfig = inferDirectoryConfig(schemaContext, cmdSpecificConfig)
+        const introspectionResult = await engine.introspect({
+          schema: toSchemasContainer(schema),
+          baseDirectoryPath: schemaContext?.schemaRootDir ?? process.cwd(),
+          viewsDirectoryPath: directoryConfig.viewsDirPath,
+          force: args['--force'],
+          compositeTypeDepth: args['--composite-type-depth'],
+          namespaces: args['--schemas']?.split(','),
+        })
 
-      /**
-       * Human-friendly error handling based on:
-       * https://www.prisma.io/docs/reference/api-reference/error-reference
-       */
+        introspectionSchema = introspectionResult.schema
+        introspectionWarnings = introspectionResult.warnings
+        debug(`Introspection warnings`, introspectionWarnings)
+      } catch (e: any) {
+        introspectionSpinner.failure()
 
-      if (e.code === 'P4001' && isSchemaEmpty(introspectionSchema)) {
-        /* P4001: The introspected database was empty */
-        throw new Error(`\n${red(bold(`${e.code} `))}${red('The introspected database was empty:')}
+        /**
+         * Human-friendly error handling based on:
+         * https://www.prisma.io/docs/reference/api-reference/error-reference
+         */
+
+        if (e.code === 'P4001' && isSchemaEmpty(introspectionSchema)) {
+          /* P4001: The introspected database was empty */
+          throw new Error(`\n${red(bold(`${e.code} `))}${red('The introspected database was empty:')}
 
 ${bold(`${this.cliCommand} db pull`)} could not create any models in your ${bold(
-          'schema.prisma',
-        )} file and you will not be able to generate Prisma Client with the ${bold(
-          getCommandWithExecutor(`${this.cliCommand} generate`),
-        )} command.
+            'schema.prisma',
+          )} file and you will not be able to generate Prisma Client with the ${bold(
+            getCommandWithExecutor(`${this.cliCommand} generate`),
+          )} command.
 
 ${bold('To fix this, you have two options:')}
 
 - manually create a table in your database.
 - make sure the database connection URL inside the ${bold('datasource')} block in ${bold(
-          'schema.prisma',
-        )} points to a database that is not empty (it must contain at least one table).
+            'schema.prisma',
+          )} points to a database that is not empty (it must contain at least one table).
 
 Then you can run ${green(getCommandWithExecutor(`${this.cliCommand} db pull`))} again.
 `)
-      } else if (e.code === 'P1003') {
-        /* P1003: Database does not exist */
-        throw new Error(`\n${red(bold(`${e.code} `))}${red('The introspected database does not exist:')}
+        } else if (e.code === 'P1003') {
+          /* P1003: Database does not exist */
+          throw new Error(`\n${red(bold(`${e.code} `))}${red('The introspected database does not exist:')}
 
 ${bold(`${this.cliCommand} db pull`)} could not create any models in your ${bold(
-          'schema.prisma',
-        )} file and you will not be able to generate Prisma Client with the ${bold(
-          getCommandWithExecutor(`${this.cliCommand} generate`),
-        )} command.
+            'schema.prisma',
+          )} file and you will not be able to generate Prisma Client with the ${bold(
+            getCommandWithExecutor(`${this.cliCommand} generate`),
+          )} command.
 
 ${bold('To fix this, you have two options:')}
 
 - manually create a database.
 - make sure the database connection URL inside the ${bold('datasource')} block in ${bold(
-          'schema.prisma',
-        )} points to an existing database.
+            'schema.prisma',
+          )} points to an existing database.
 
 Then you can run ${green(getCommandWithExecutor(`${this.cliCommand} db pull`))} again.
 `)
-      } else if (e.code === 'P1012') {
-        /* P1012: Schema parsing error */
-        process.stdout.write('\n') // empty line
+        } else if (e.code === 'P1012') {
+          /* P1012: Schema parsing error */
+          process.stdout.write('\n') // empty line
 
-        const message = relativizePathInPSLError(e.message)
+          const message = relativizePathInPSLError(e.message)
 
-        throw new Error(`${red(message)}
+          throw new Error(`${red(message)}
 Introspection failed as your current Prisma schema file is invalid
 
 Please fix your current schema manually (using either ${green(
-          getCommandWithExecutor(`${this.cliCommand} validate`),
-        )} or the Prisma VS Code extension to understand what's broken and confirm you fixed it), and then run this command again.
+            getCommandWithExecutor(`${this.cliCommand} validate`),
+          )} or the Prisma VS Code extension to understand what's broken and confirm you fixed it), and then run this command again.
 Or run this command with the ${green(
-          '--force',
-        )} flag to ignore your current schema and overwrite it. All local modifications will be lost.\n`)
+            '--force',
+          )} flag to ignore your current schema and overwrite it. All local modifications will be lost.\n`)
+        }
+
+        process.stdout.write('\n') // empty line
+        throw e
       }
 
-      process.stdout.write('\n') // empty line
-      throw e
-    }
+      const introspectionWarningsMessage = this.getWarningMessage(introspectionWarnings)
 
-    const introspectionWarningsMessage = this.getWarningMessage(introspectionWarnings)
+      if (args['--print']) {
+        printIntrospectedSchema(introspectionSchema, process.stdout)
 
-    if (args['--print']) {
-      printIntrospectedSchema(introspectionSchema, process.stdout)
-
-      if (introspectionWarningsMessage.trim().length > 0) {
-        // Replace make it a // comment block
-        console.error(introspectionWarningsMessage.replace(/(\n)/gm, '\n// '))
-      }
-    } else {
-      if (args['--force']) {
-        await removeSchemaFiles(schema)
-      }
-      await saveSchemaFiles(introspectionSchema)
-
-      const { modelsCount, typesCount } = countModelsAndTypes(introspectionSchema)
-
-      const modelsCountMessage = `${modelsCount} ${modelsCount > 1 ? 'models' : 'model'}`
-      const typesCountMessage = `${typesCount} ${typesCount > 1 ? 'embedded documents' : 'embedded document'}`
-      let modelsAndTypesMessage: string
-      if (typesCount > 0) {
-        modelsAndTypesMessage = `${modelsCountMessage} and ${typesCountMessage}`
+        if (introspectionWarningsMessage.trim().length > 0) {
+          // Replace make it a // comment block
+          console.error(introspectionWarningsMessage.replace(/(\n)/gm, '\n// '))
+        }
       } else {
-        modelsAndTypesMessage = `${modelsCountMessage}`
-      }
-      const modelsAndTypesCountMessage =
-        modelsCount + typesCount > 1
-          ? `${modelsAndTypesMessage} and wrote them`
-          : `${modelsAndTypesMessage} and wrote it`
+        if (args['--force']) {
+          await removeSchemaFiles(schema)
+        }
+        await saveSchemaFiles(introspectionSchema)
 
-      const introspectedSchemaPath = schemaContext?.loadedFromPathForLogMessages || introspectionSchema.files[0].path
-      introspectionSpinner.success(`Introspected ${modelsAndTypesCountMessage} into ${underline(
-        path.relative(process.cwd(), introspectedSchemaPath),
-      )} in ${bold(formatms(Math.round(performance.now()) - before))}
+        const { modelsCount, typesCount } = countModelsAndTypes(introspectionSchema)
+
+        const modelsCountMessage = `${modelsCount} ${modelsCount > 1 ? 'models' : 'model'}`
+        const typesCountMessage = `${typesCount} ${typesCount > 1 ? 'embedded documents' : 'embedded document'}`
+        let modelsAndTypesMessage: string
+        if (typesCount > 0) {
+          modelsAndTypesMessage = `${modelsCountMessage} and ${typesCountMessage}`
+        } else {
+          modelsAndTypesMessage = `${modelsCountMessage}`
+        }
+        const modelsAndTypesCountMessage =
+          modelsCount + typesCount > 1
+            ? `${modelsAndTypesMessage} and wrote them`
+            : `${modelsAndTypesMessage} and wrote it`
+
+        const introspectedSchemaPath = schemaContext?.loadedFromPathForLogMessages || introspectionSchema.files[0].path
+        introspectionSpinner.success(`Introspected ${modelsAndTypesCountMessage} into ${underline(
+          path.relative(process.cwd(), introspectedSchemaPath),
+        )} in ${bold(formatms(Math.round(performance.now()) - before))}
       ${yellow(introspectionWarningsMessage)}
 ${`Run ${green(getCommandWithExecutor(`${this.cliCommand} generate`))} to generate Prisma Client.`}`)
-    }
+      }
 
-    return ''
+      return ''
+    } finally {
+      await migrate.stop()
+    }
   }
 
   private getWarningMessage(warnings: EngineArgs.IntrospectResult['warnings']): string {

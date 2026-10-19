@@ -141,6 +141,9 @@
   },
   "files": [
     "README.md",
+    "LICENSE",
+    "MODIFICATIONS.md",
+    "THIRD_PARTY_NOTICES.txt",
     "runtime",
     "scripts",
     "edge.js",

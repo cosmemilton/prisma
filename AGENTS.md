@@ -189,3 +189,18 @@ You may only need to build and update one of these modules if your changes are i
 2. Build only `query-compiler-wasm` if your changes are related to query planning and execution but do not touch the schema or DMMF in any way.
 
 When in doubt, build both to avoid unexpected behavior. Time and cost of compilation is always less than of debugging.
+
+## Experimental Firebird development
+
+See [the Firebird guide](docs/firebird.md) for the paired repository/build requirements,
+provider contracts, focused tests and current limitations. Firebird uses the
+JavaScript adapter and modified Wasm modules; a native Firebird engine is not
+provided. Preserve LICENSE, modification notices and copied-code attributions.
+Use explicitly owned disposable databases and synthetic data for integration
+tests. Keep database files, credentials, packages, generated build outputs and
+historical acceptance reports outside Git. Preserve immutable evidence locally
+before consolidating documentation; do not rewrite old receipts.
+
+On constrained Windows hosts, use native tooling, bound Cargo jobs and test
+workers, and coordinate builds with the user. Run checks proportional to the
+change; a documentation edit does not require a full Rust/Wasm rebuild.

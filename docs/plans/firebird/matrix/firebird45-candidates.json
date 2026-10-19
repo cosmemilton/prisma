@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "classification": "OFFICIAL_ARCHIVE_METADATA_CANDIDATES_NOT_EXECUTED_COMPATIBILITY",
+  "metadataCheckedOn": "2026-10-18",
+  "downloadedByThisTask": false,
+  "supportAccepted": false,
+  "candidates": [
+    {
+      "major": 4,
+      "version": "4.0.7",
+      "build": "4.0.7.3271",
+      "platform": "windows-x64",
+      "archive": "Firebird-4.0.7.3271-0-x64.zip",
+      "sha256": "d1ccbff156750ea712635dc49b3a1405fd1c9f23a952b018c885e7ba6af59d06",
+      "approximatePublishedSize": "23.1 MB",
+      "metadataUrl": "https://github.com/FirebirdSQL/firebird/releases/expanded_assets/v4.0.7",
+      "releaseApi": "https://api.github.com/repos/FirebirdSQL/firebird/releases/tags/v4.0.7",
+      "downloadUrl": "https://github.com/FirebirdSQL/firebird/releases/download/v4.0.7/Firebird-4.0.7.3271-0-x64.zip",
+      "port": 3054,
+      "suggestedLabDirectory": "firebird4-matrix-lab",
+      "expectedSchemaEngineOutcome": "explicit-firebird-3-major-guard-rejection"
+    },
+    {
+      "major": 5,
+      "version": "5.0.4",
+      "build": "5.0.4.1812",
+      "platform": "windows-x64",
+      "archive": "Firebird-5.0.4.1812-0-windows-x64.zip",
+      "sha256": "01e844fce4d5f53272a76205dbc3a1ba4b782ab8e8eadcd808cdbccd9ce13b72",
+      "approximatePublishedSize": "24 MB",
+      "metadataUrl": "https://github.com/FirebirdSQL/firebird/releases/expanded_assets/v5.0.4",
+      "releaseApi": "https://api.github.com/repos/FirebirdSQL/firebird/releases/tags/v5.0.4",
+      "downloadUrl": "https://github.com/FirebirdSQL/firebird/releases/download/v5.0.4/Firebird-5.0.4.1812-0-windows-x64.zip",
+      "port": 3055,
+      "suggestedLabDirectory": "firebird5-matrix-lab",
+      "expectedSchemaEngineOutcome": "explicit-firebird-3-major-guard-rejection"
+    }
+  ]
+}

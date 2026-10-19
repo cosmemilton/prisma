@@ -12,6 +12,7 @@ pnpm-debug.log
 /target
 migration-engine*
 schema-engine*
+!/packages/migrate/src/__tests__/schema-engine-wasm-dispose.test.ts
 
 *tmp.db
 dist/
@@ -43,3 +44,9 @@ junit.xml
 package.copy.json
 
 *.tgz
+
+# Local experimental Firebird reports and generated build metadata.
+/docs/plans/firebird/evidence/
+/docs/plans/firebird/scripts/__pycache__/
+/packages/cli/cliConfig.meta.json
+/packages/client/scripts/default-index.meta.json

@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import type { PrismaConfigInternal } from '@prisma/config'
 import { ensureNeededBinariesExist } from '@prisma/engines'
 import type { BinaryPaths, DownloadOptions } from '@prisma/fetch-engine'
@@ -54,9 +55,9 @@ export class CLI implements Command {
     }
 
     if (args['--version']) {
-      await ensureNeededBinariesExist({
-        download: this.download,
-      })
+      if (process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird') {
+        await ensureNeededBinariesExist({ download: this.download })
+      }
       return Version.new(this.identity).parse(argv, config, baseDir)
     }
 
@@ -70,14 +71,14 @@ export class CLI implements Command {
     const cmd = this.cmds[cmdName]
     if (cmd) {
       const checkResultPromise =
-        this.identity === 'prisma'
+        this.identity === 'prisma' && process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird'
           ? runCheckpointClientCheck({ schemaPathFromConfig: config.schema, baseDir }).catch(() => {
               /* noop */
             })
           : undefined
 
       // if we have that subcommand, let's ensure that the binary is there in case the command needs it
-      if (this.ensureBinaries.includes(cmdName)) {
+      if (process.env.PRISMA_CLI_BUILD_PROFILE !== 'firebird' && this.ensureBinaries.includes(cmdName)) {
         await ensureNeededBinariesExist({
           download: this.download,
         })
@@ -125,6 +126,26 @@ Learn more at ${link('https://pris.ly/cli/pdp')}`
 }
 
 function createHelp(identity: CliDistributionIdentity): string {
+  if (process.env.PRISMA_CLI_BUILD_PROFILE === 'firebird') {
+    return format(`
+Prisma CLI — local experimental Firebird profile
+
+${bold('Usage')}
+  ${dim('$')} ${identity} [command]
+
+${bold('Commands')}
+  init       Set up a Firebird project without provisioning a database
+  generate   Generate Prisma Client
+  db         Pull, push or execute against an existing Firebird database
+  migrate    Create, inspect and apply Firebird migrations
+  validate   Validate a Prisma schema
+  format     Format a Prisma schema
+  version    Display bundled Wasm version information
+  debug      Display Prisma debug information
+
+Use ${identity} [command] --help for options. Studio and development servers are excluded from this build.
+`)
+  }
   return format(`
     ${
       process.platform === 'win32' ? '' : bold(green('◭  '))

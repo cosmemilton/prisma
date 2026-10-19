@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { DriverAdapterError, isDriverAdapterError } from '@prisma/driver-adapter-utils'
 
 import { assertNever, safeJsonStringify } from './utils'
@@ -42,7 +43,7 @@ export function rethrowAsUserFacing(error: any): never {
   }
 
   // No specific mapping exists for this error kind. For database-specific
-  // kinds (`postgres`, `mysql`, `sqlite`, `mssql`) this happens when the
+  // kinds (`postgres`, `mysql`, `sqlite`, `mssql`, `firebird`) this happens when the
   // adapter doesn't recognize the underlying database error code. Falling
   // back to a P2039 user-facing error with the raw database code and
   // message ensures that:
@@ -119,6 +120,7 @@ function isGenericDatabaseErrorKind(kind: DriverAdapterError['cause']['kind']): 
     case 'mysql':
     case 'sqlite':
     case 'mssql':
+    case 'firebird':
       return true
     default:
       return false
@@ -179,6 +181,7 @@ function getErrorCode(err: DriverAdapterError): string | undefined {
     case 'sqlite':
     case 'mysql':
     case 'mssql':
+    case 'firebird':
       return
     default:
       assertNever(err.cause, `Unknown error: ${safeJsonStringify(err.cause)}`)
@@ -258,6 +261,7 @@ function renderErrorMessage(err: DriverAdapterError): string | undefined {
     case 'postgres':
     case 'mysql':
     case 'mssql':
+    case 'firebird':
       return
     default:
       assertNever(err.cause, `Unknown error: ${safeJsonStringify(err.cause)}`)

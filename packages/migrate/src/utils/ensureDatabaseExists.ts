@@ -1,3 +1,5 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
+
 import path from 'node:path'
 
 import { DataSource } from '@prisma/generator'
@@ -6,6 +8,7 @@ import { canConnectToDatabase, createDatabase, PRISMA_POSTGRES_PROVIDER, uriToCr
 import { bold } from 'kleur/colors'
 
 import { ConnectorType } from './printDatasources'
+import { ensureFirebirdConnection, isFirebirdUrl } from './firebirdSchemaEngine'
 import { getSocketFromDatabaseCredentials } from './unixSocket'
 
 export type MigrateAction = 'create' | 'apply' | 'unapply' | 'dev' | 'push'
@@ -17,6 +20,7 @@ export type PrettyProvider =
   | 'SQL Server'
   | 'CockroachDB'
   | 'MongoDB'
+  | 'Firebird'
 
 // TODO: extract functions in their own files?
 
@@ -116,6 +120,11 @@ export async function ensureCanConnectToDatabase(
 ): Promise<void> {
   const url = config.datasource.url
 
+  if (isFirebirdUrl(url)) {
+    await ensureFirebirdConnection(config.datasource)
+    return
+  }
+
   const canConnect = await canConnectToDatabase(url, pathResolutionRoot)
 
   if (canConnect === true) {
@@ -134,6 +143,11 @@ export async function ensureDatabaseExists(
   config: PrismaConfigWithDatasource,
 ): Promise<SuccessMessage | undefined> {
   const url = config.datasource.url
+
+  if (provider === 'firebird' || isFirebirdUrl(url)) {
+    await ensureFirebirdConnection(config.datasource)
+    return
+  }
 
   const canConnect = await canConnectToDatabase(url, pathResolutionRoot)
   if (canConnect === true) {
@@ -209,5 +223,7 @@ export function prettifyProvider(provider: ConnectorType): PrettyProvider {
       return `SQL Server`
     case 'mongodb':
       return `MongoDB`
+    case 'firebird':
+      return `Firebird`
   }
 }

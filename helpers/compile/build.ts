@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { ChokidarOptions, watch as createWatcher } from 'chokidar'
 import * as esbuild from 'esbuild'
 import { BuildContext } from 'esbuild'
@@ -121,7 +122,7 @@ async function executeEsBuild(options: BuildOptions) {
   const build = await esbuild.build(omit(options, ['name', 'emitTypes', 'emitMetafile']) as any)
   const outdir = options.outdir ?? (options.outfile ? path.dirname(options.outfile) : undefined)
 
-  if (build.metafile && options.emitMetafile) {
+  if (build.metafile && (options.emitMetafile || process.env.PRISMA_BUILD_METAFILE === 'true')) {
     const metafilePath = `${outdir}/${options.name}.meta.json`
     writeFileSync(metafilePath, JSON.stringify(build.metafile))
   }

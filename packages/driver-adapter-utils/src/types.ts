@@ -1,3 +1,4 @@
+/*! Modified for experimental Firebird support (2026-10-18); see MODIFICATIONS.md. */
 import { ColumnTypeEnum } from './const'
 import { Result } from './result'
 
@@ -193,14 +194,23 @@ export type MappedError =
       code: number
       message: string
     }
+  | {
+      kind: 'firebird'
+      code: number
+      message: string
+    }
 
 export type ConnectionInfo = {
   schemaName?: string
   maxBindValues?: number
+  /** Maximum simultaneous database attachments available to this adapter. */
+  maxConcurrentConnections?: number
+  /** Whether transactions use NOWAIT or a finite server lock timeout. */
+  supportsBoundedTransactionWait?: boolean
   supportsRelationJoins: boolean
 }
 
-export type Provider = 'mysql' | 'postgres' | 'sqlite' | 'sqlserver'
+export type Provider = 'mysql' | 'postgres' | 'sqlite' | 'sqlserver' | 'firebird'
 
 // Current list of official Prisma adapters
 // This list might get outdated over time.
@@ -214,6 +224,7 @@ const officialPrismaAdapters = [
   '@prisma/adapter-pg',
   '@prisma/adapter-mssql',
   '@prisma/adapter-mariadb',
+  '@prisma/adapter-firebird',
 ] as const
 
 export type OfficialDriverAdapterName = (typeof officialPrismaAdapters)[number]

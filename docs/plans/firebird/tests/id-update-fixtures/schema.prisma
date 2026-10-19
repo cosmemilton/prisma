@@ -1,0 +1,97 @@
+// Added for experimental Firebird support (2026-10-18); see MODIFICATIONS.md.
+generator client {
+  provider            = "prisma-client"
+  output              = "./generated"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "firebird"
+}
+
+model MappedKey {
+  id    String @id @map("physical_code") @db.VarChar(40)
+  value String @db.VarChar(80)
+  @@map("M6_MappedKey")
+}
+
+model CascadeParent {
+  id   String @id @db.VarChar(40)
+  kids CascadeKid[]
+}
+model CascadeKid {
+  id       Int @id
+  parentId String @db.VarChar(40)
+  note     String @db.VarChar(80)
+  parent   CascadeParent @relation(fields: [parentId], references: [id], onUpdate: Cascade, onDelete: NoAction)
+}
+
+model NoActionParent {
+  id   String @id @db.VarChar(40)
+  kids NoActionKid[]
+}
+model NoActionKid {
+  id       Int @id
+  parentId String @db.VarChar(40)
+  parent   NoActionParent @relation(fields: [parentId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+}
+
+model NullParent {
+  id   String @id @db.VarChar(40)
+  kids NullKid[]
+}
+model NullKid {
+  id       Int @id
+  parentId String? @db.VarChar(40)
+  parent   NullParent? @relation(fields: [parentId], references: [id], onUpdate: SetNull, onDelete: SetNull)
+}
+
+model DefaultParent {
+  id   String @id @db.VarChar(40)
+  kids DefaultKid[]
+}
+model DefaultKid {
+  id       Int @id
+  parentId String @default("fallback") @db.VarChar(40)
+  parent   DefaultParent @relation(fields: [parentId], references: [id], onUpdate: SetDefault, onDelete: NoAction)
+}
+
+model ImplicitParent {
+  id   String @id @db.VarChar(40)
+  kids ImplicitKid[]
+}
+model ImplicitKid {
+  id       Int @id
+  parentId String @db.VarChar(40)
+  parent   ImplicitParent @relation(fields: [parentId], references: [id], onDelete: NoAction)
+}
+
+model CompoundKey {
+  region String @db.VarChar(20)
+  number Int
+  value  String @db.VarChar(40)
+  @@id([region, number])
+}
+
+model NumericKey {
+  id     Int @id
+  amount Int @default(0)
+  bucket String @db.VarChar(20)
+}
+
+model BigIntKey {
+  id    BigInt @id
+  value String @db.VarChar(40)
+}
+
+model DecimalKey {
+  id    Decimal @id @db.Decimal(18, 6)
+  value String @db.VarChar(40)
+}
+
+model TriggerKey {
+  id    String @id @map("trigger_code") @db.VarChar(40)
+  value String @db.VarChar(80)
+  @@map("M6_TriggerKey")
+}

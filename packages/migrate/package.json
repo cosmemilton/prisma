@@ -50,6 +50,7 @@
     "@prisma/internals": "*"
   },
   "dependencies": {
+    "@prisma/adapter-firebird": "workspace:*",
     "@prisma/client-generator-registry": "workspace:*",
     "@prisma/config": "workspace:*",
     "@prisma/debug": "workspace:*",
