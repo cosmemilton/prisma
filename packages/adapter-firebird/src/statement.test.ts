@@ -2,8 +2,8 @@
 
 import { ColumnTypeEnum, DriverAdapterError } from '@prisma/driver-adapter-utils'
 import type { Transaction } from 'node-firebird'
-import type { XdrReader } from 'node-firebird/lib/wire/serialize.js'
-import type { SQLVarBase } from 'node-firebird/lib/wire/xsqlvar.js'
+import { XdrReader } from 'node-firebird/lib/wire/serialize.js'
+import { type SQLVarBase, SQLVarBlob, SQLVarInt64 } from 'node-firebird/lib/wire/xsqlvar.js'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SqlType } from './conversion'
@@ -66,6 +66,20 @@ describe('statement codecs', () => {
     )
     const nullReader = { readInt: () => 1, readInt64BigInt: () => 0n } as XdrReader
     expect(statement.output[1].decode(nullReader, true)).toBeNull()
+  })
+
+  it.each([
+    [900719925474099123n, -3, '900719925474099.123'],
+    [-999999999999999999n, -18, '-0.999999999999999999'],
+  ] as const)('decodes fixed-point coefficient %s at scale %i from real XDR bytes', (coefficient, scale, expected) => {
+    const original = Object.assign(new SQLVarInt64(), field(SqlType.Int64, { subType: 2, scale }))
+    const statement = { input: [], output: [original] }
+    const wire = Buffer.alloc(8)
+    wire.writeBigInt64BE(coefficient)
+    configureCodecs(statement)
+    expect(statement.output[0].decode(new XdrReader(wire), false)).toBe(expected)
+    expect(original).toMatchObject({ type: SqlType.Int64, subType: 2, scale })
+    expect(Object.hasOwn(original, 'decode')).toBe(false)
   })
 
   it('decodes calendar dates and 100-microsecond times without local Date construction', () => {
@@ -282,8 +296,8 @@ describe('prepared execution', () => {
     expect(statement.releaseAsync).toHaveBeenCalledOnce()
   })
 
-  it('closes failed BLOB reads without rolling back the caller transaction or masking the read error', async () => {
-    const original = [field(SqlType.Blob)]
+  it.each([0, 2])('closes failed BLOB subtype %i reads without masking the read error', async (subType) => {
+    const original = [field(SqlType.Blob, { subType })]
     const statement = fakeStatement(original)
     statement.fetchAllAsync.mockResolvedValue([[{ high: 0, low: 1 }]])
     const error = new Error('read failed')
@@ -296,6 +310,98 @@ describe('prepared execution', () => {
     expect(statement.releaseAsync).toHaveBeenCalledOnce()
     expect(statement.output).toBe(original)
   })
+
+  it.each([SqlType.Blob, SqlType.Blob + 1])(
+    'materializes segmented BLR type %i using the owning transaction and restores cached descriptors',
+    async (type) => {
+      const original = [field(type, { subType: 2, alias: 'arbitrary_payload' })]
+      const statement = fakeStatement(original)
+      const id = { high: 0, low: 71 }
+      const transaction = fakeTransaction(statement)
+      const payload = Buffer.from([0, 255, 195, 40, 0, 128, 254])
+      const query = { sql: 'SELECT stored_blr AS arbitrary_payload FROM records', args: [], argTypes: [] }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        statement.fetchAllAsync.mockResolvedValue([[id]])
+        statement.connection.getSegment
+          .mockImplementationOnce((_blob, callback) =>
+            callback(null, { buffer: Buffer.concat([Buffer.from([3, 0]), payload.subarray(0, 3)]), handle: 0 }),
+          )
+          .mockImplementationOnce((_blob, callback) =>
+            callback(null, { buffer: Buffer.concat([Buffer.from([4, 0]), payload.subarray(3)]), handle: 2 }),
+          )
+        expect(await runQuery(transaction, query)).toEqual({
+          columnNames: ['arbitrary_payload'],
+          columnTypes: [ColumnTypeEnum.Bytes],
+          rows: [[payload]],
+          affectedRows: 1,
+        })
+        expect(statement.output).toBe(original)
+        expect(original[0]).toMatchObject({ type, subType: 2, alias: 'arbitrary_payload' })
+        expect(Object.hasOwn(original[0], 'decode')).toBe(false)
+        expect(statement.connection.openBlob).toHaveBeenLastCalledWith(id, transaction, expect.any(Function))
+      }
+      expect(statement.connection.getSegment).toHaveBeenCalledTimes(4)
+      expect(statement.connection.closeBlob).toHaveBeenCalledTimes(2)
+      expect(statement.releaseAsync).toHaveBeenCalledTimes(2)
+    },
+  )
+
+  it('distinguishes NULL and empty BLR values without opening a NULL handle', async () => {
+    const original = [field(SqlType.Blob + 1, { subType: 2, alias: 'optional_payload' })]
+    const statement = fakeStatement(original)
+    statement.fetchAllAsync.mockResolvedValue([[null], [{ high: 0, low: 72 }]])
+    const result = await runQuery(fakeTransaction(statement), {
+      sql: 'SELECT stored_blr AS optional_payload FROM records',
+      args: [],
+      argTypes: [],
+    })
+    expect(result).toEqual({
+      columnNames: ['optional_payload'],
+      columnTypes: [ColumnTypeEnum.Bytes],
+      rows: [[null], [Buffer.alloc(0)]],
+      affectedRows: 2,
+    })
+    expect(statement.connection.openBlob).toHaveBeenCalledOnce()
+    expect(statement.connection.closeBlob).toHaveBeenCalledOnce()
+    expect(statement.output).toBe(original)
+  })
+
+  it.each([-9223372036854775808n, -9007199254740993n, 0n, 9007199254740993n, 9223372036854775807n])(
+    'keeps Int64 %s exact beside a BLR result using the real XDR decoder',
+    async (integer) => {
+      const original = [
+        Object.assign(new SQLVarBlob(), field(SqlType.Blob, { subType: 2 })),
+        Object.assign(new SQLVarInt64(), field(SqlType.Int64, { alias: 'integer_value' })),
+      ]
+      const statement = fakeStatement(original)
+      const wire = Buffer.alloc(8)
+      wire.writeBigInt64BE(integer)
+      const blobWire = Buffer.alloc(8)
+      blobWire.writeInt32BE(73, 4)
+      statement.fetchAllAsync.mockImplementation(async () => [
+        [
+          statement.output[0].decode(new XdrReader(blobWire), false),
+          statement.output[1].decode(new XdrReader(wire), false),
+        ],
+      ])
+      const transaction = fakeTransaction(statement)
+      const result = await runQuery(transaction, {
+        sql: 'SELECT stored_blr, stored_bigint AS integer_value FROM records',
+        args: [],
+        argTypes: [],
+      })
+      expect(result.columnTypes).toEqual([ColumnTypeEnum.Bytes, ColumnTypeEnum.Int64])
+      expect(result.rows).toEqual([[Buffer.alloc(0), integer.toString()]])
+      expect(statement.connection.openBlob).toHaveBeenCalledWith(
+        { high: 0, low: 73 },
+        transaction,
+        expect.any(Function),
+      )
+      expect(statement.connection.closeBlob).toHaveBeenCalledOnce()
+      expect(statement.output).toBe(original)
+      expect(statement.releaseAsync).toHaveBeenCalledOnce()
+    },
+  )
 
   it('restores prepared descriptors on execution failure', async () => {
     const original = [field(SqlType.Timestamp)]

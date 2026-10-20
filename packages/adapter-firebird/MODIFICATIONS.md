@@ -1,6 +1,6 @@
 # Experimental Firebird adapter additions
 
-Added on 2026-10-18 and modified on 2026-10-19 for the Prisma ORM 7.10.1 Firebird
+Added on 2026-10-18 and modified on 2026-10-19/20 for the Prisma ORM 7.10.1 Firebird
 fork. This package adds attachment-pool and transaction ownership, statement-local
 exact-value codecs, native error mapping, SQL-script execution, verified local
 shadow connections, migration metadata and focused tests. The explicit
@@ -13,6 +13,12 @@ carry addition/modification notices. The external `node-firebird` dependency is
 pinned to 2.18.2, used unchanged, and retains its MPL-2.0 source and LICENSE in the
 installed dependency. Its source is not incorporated into the adapter bundle.
 The adapter relies on its exported wire modules and prepared-statement descriptors.
+
+Prepared BLOB subtype 2 (BLR) results are classified as bytes using their native
+descriptor, without SQL/alias-specific handling. Regression sources cover segmented
+and empty/NULL bytes, descriptor reuse and exact Int64 decoding beside BLR values.
+The Int64/Decimal codecs, external driver and other BLOB subtype boundaries are
+unchanged. Execution of these new regressions has its own validation record.
 
 See [README.md](README.md) for supported values, transaction and shadow boundaries.
 The paired schema validator, query compiler and schema-engine Wasm builds are

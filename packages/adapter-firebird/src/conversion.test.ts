@@ -3,7 +3,7 @@
 import { ColumnTypeEnum } from '@prisma/driver-adapter-utils'
 import { describe, expect, it } from 'vitest'
 
-import { formatDateArgument, formatScaledInteger, mapArg, mapColumnType, SqlType } from './conversion'
+import { formatDateArgument, formatScaledInteger, mapArg, mapColumnType, mapValue, SqlType } from './conversion'
 
 const argument = (scalarType: Parameters<typeof mapArg>[1]['scalarType'], dbType?: string) => ({
   scalarType,
@@ -52,7 +52,9 @@ describe('Firebird metadata', () => {
     [SqlType.Long, 1, 0, ColumnTypeEnum.Numeric],
     [SqlType.Int64, 2, -18, ColumnTypeEnum.Numeric],
     [SqlType.Blob, 0, 0, ColumnTypeEnum.Bytes],
+    [SqlType.Blob, undefined, 0, ColumnTypeEnum.Bytes],
     [SqlType.Blob, 1, 0, ColumnTypeEnum.Text],
+    [SqlType.Blob, 2, 0, ColumnTypeEnum.Bytes],
     [SqlType.Text, 1, 0, ColumnTypeEnum.Bytes],
     [SqlType.Boolean, 0, 0, ColumnTypeEnum.Boolean],
     [SqlType.Date, 0, 0, ColumnTypeEnum.Date],
@@ -63,8 +65,21 @@ describe('Firebird metadata', () => {
   })
 
   it('rejects unhandled BLOB subtypes and floating-point decimal storage', () => {
-    expect(() => mapColumnType({ type: SqlType.Blob, subType: 2, typeName: 'BLOB' })).toThrow()
+    for (const subType of [-1, 3, 4, 5, 6, 7, 8]) {
+      expect(() => mapColumnType({ type: SqlType.Blob, subType, typeName: 'BLOB' })).toThrow()
+    }
     expect(() => mapColumnType({ type: SqlType.Double, subType: 1, typeName: 'DOUBLE' })).toThrow()
+  })
+
+  it.each([SqlType.Blob, SqlType.Blob + 1])('preserves BLR bytes and NULL for prepared type %i', (type) => {
+    const field = { type, subType: 2, typeName: 'BLOB', alias: 'arbitrary_payload' }
+    expect(mapColumnType(field)).toBe(ColumnTypeEnum.Bytes)
+    expect(mapValue(null, field)).toBeNull()
+    const storage = new Uint8Array([17, 0, 255, 195, 40, 0, 17])
+    const payload = storage.subarray(1, 6)
+    expect(mapValue(payload, field)).toBe(payload)
+    expect(mapValue(payload, field)).toEqual(new Uint8Array([0, 255, 195, 40, 0]))
+    expect(mapValue(Buffer.alloc(0), field)).toEqual(Buffer.alloc(0))
   })
 
   it('formats scaled coefficients without floating-point arithmetic', () => {

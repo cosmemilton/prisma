@@ -1,6 +1,6 @@
 # Experimental Firebird fork modifications
 
-Modified on 2026-10-18 and 2026-10-19 from Prisma ORM 7.10.1,
+Modified on 2026-10-18, 2026-10-19 and 2026-10-20 from Prisma ORM 7.10.1,
 commit `97ea359250335c1a174504c9b2b7e5fe030ab937`.
 The upstream Apache-2.0 LICENSE and existing copyright/attribution notices are
 preserved. This is an experimental fork, not an upstream Prisma release.

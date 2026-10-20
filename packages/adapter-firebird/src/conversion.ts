@@ -52,7 +52,9 @@ export function mapColumnType(field: FieldMetadata): ColumnType {
     case SqlType.Time:
       return ColumnTypeEnum.Time
     case SqlType.Blob:
-      if (field.subType === 0 || field.subType === undefined) return ColumnTypeEnum.Bytes
+      // Subtype 2 is binary language representation (BLR), including catalog expressions.
+      // Classify the prepared descriptor; SQL text and column aliases do not determine its encoding.
+      if (field.subType === 0 || field.subType === undefined || field.subType === 2) return ColumnTypeEnum.Bytes
       if (field.subType === 1) return ColumnTypeEnum.Text
       break
     case SqlType.Null:
