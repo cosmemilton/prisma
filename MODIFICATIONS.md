@@ -8,7 +8,8 @@ preserved. This is an experimental fork, not an upstream Prisma release.
 The modifications add a distinct Firebird provider and driver adapter, generated
 Client/runtime integration, exact numeric and temporal codecs, parameterized CRUD,
 identity and transactional singleton-insert createMany plans, updateable identifiers,
-literal-prefix filters, and explicit READ COMMITTED record-version policy. They
+literal-prefix filters, typed server DATE expressions through the paired compiler,
+and explicit READ COMMITTED record-version policy. They
 also add schema-engine Wasm routing for introspection, schema diff/push and the
 supported migration subset, plus an optional Firebird CLI build profile and tests.
 Shared lifecycle/disposal, offline datamodel diff and driver-adapter interfaces are

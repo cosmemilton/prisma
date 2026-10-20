@@ -6,7 +6,7 @@ This fork adds a real `firebird` provider, a JavaScript driver adapter, generate
 
 The ORM source line is Prisma 7.10.1. Its paired engines baseline is `d1b3f377ca835d73fd50954a5e22128b9ebdd6b8`, with the Firebird changes applied in the companion checkout. The matching upstream Wasm package version is `8.1.0-1.d1b3f377ca835d73fd50954a5e22128b9ebdd6b8`; that package label does not make this a Prisma 8 implementation. Use the paired sources together rather than replacing either checkout with upstream `main`.
 
-Use [paired engines commit 8d1a49e7db09f86e072d382fd8f5179a167fc0b0](https://github.com/cosmemilton/prisma-engines/commit/8d1a49e7db09f86e072d382fd8f5179a167fc0b0) (`work/firebird3`) in a sibling `prisma-engines-firebird` checkout. Build the local Wasm packages and provide the matching upstream compiler package as described below. The expected local layout is:
+Use [paired engines commit c32198f4f6e15732ad4db408121cbb380db0c7c8](https://github.com/cosmemilton/prisma-engines/commit/c32198f4f6e15732ad4db408121cbb380db0c7c8) (`work/firebird3`) in a sibling `prisma-engines-firebird` checkout. Build the local Wasm packages and provide the matching upstream compiler package as described below. The expected local layout is:
 
 ```text
 workspace/
@@ -182,6 +182,34 @@ RepeatableRead and Snapshot map to Firebird SNAPSHOT; Serializable maps to SNAPS
 Connections use UTF8 and positional `?` parameters. BigInt and fixed-point Decimal values retain exact integer/decimal strings across the driver boundary; supply BigInt as bigint/integer strings and Decimal as strings/Prisma Decimal rather than lossy JavaScript numbers. Firebird DATE/TIME/TIMESTAMP have no time zone; the adapter interprets their calendar fields as UTC. Raw temporal results retain four fractional digits, while JavaScript Date/Prisma DateTime expose milliseconds. Unsupported types and invalid UTF8 text BLOBs fail explicitly.
 
 Firebird-specific `startsWith` and `notStartsWith` use literal STARTING WITH semantics: percent and underscore remain literal characters. A typed UTF8 parameter avoids binding a search term to the compared column's narrower width. The adapter checks each execution against the original maximum UTF8 text descriptor and rejects strings above 8191 Unicode code points, including trailing blanks, instead of allowing silent truncation. That parameter limit does not guarantee an indexed predicate accepts every value up to the limit; the database's index-key bound can still return a native error. `contains`, `endsWith` and generic LIKE behavior retain their existing contracts.
+
+### Server DATE values in writes
+
+With the matching schema and query-compiler Wasm builds, native `@db.Date` fields
+accept `{ currentDate: true }` in model create/update data, including nested and
+bulk input shapes. The fixed `CURRENT_DATE` expression is evaluated by Firebird
+within the same INSERT or UPDATE as the other assignments. It requires no physical
+column DEFAULT, preliminary clock query or client date calculation.
+
+```typescript
+await prisma.entry.create({
+  data: { createdDate: { currentDate: true }, status: '1' },
+})
+await prisma.entry.update({
+  where: { id },
+  data: { usedDate: { currentDate: true }, status: '2' },
+})
+```
+
+Use the names from your generated model. This operation preserves the existing
+trigger, RETURNING and transaction paths; it does not add general SQL expressions
+or a server-clock read API. Date/ISO values, nullable dates and ordinary `set`
+updates retain their contracts. Plain strings such as `"CURRENT_DATE"` remain
+invalid dates. The Boolean operation accepts only `true` at runtime; `false` is
+rejected before SQL despite being admitted by the generated Boolean type.
+TIMESTAMP, TIME and other providers do not expose this operation. Rebuild both
+schema and query-compiler Wasm, rebuild the consuming CLI/Client packages and
+regenerate the application Client together; an adapter-only update is insufficient.
 
 ## Introspection and migration boundaries
 

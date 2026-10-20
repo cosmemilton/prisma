@@ -207,3 +207,7 @@ change; a documentation edit does not require a full Rust/Wasm rebuild.
 
 Prepared BLOB subtype 2 is BLR and must remain bytes; subtype 1 is UTF8 text.
 Keep exact Int64/Decimal decoding independent of binary BLOB classification.
+
+Firebird native DATE write expressions require matching schema/query-compiler Wasm
+and regenerated Client inputs. The currentDate flag must stay nonparameterizable
+and separate from the shared DateTime/TIMESTAMP operation identifier.
